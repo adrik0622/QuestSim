@@ -1,0 +1,16 @@
+config_version=5
+
+[application]
+config/name="QuestSim Shared Room"
+run/main_scene="res://Session.tscn"
+config/features=PackedStringArray("4.6", "C#", "GL Compatibility")
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=540
+
+[dotnet]
+project/assembly_name="QuestSim.Game"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
