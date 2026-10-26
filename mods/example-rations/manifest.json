@@ -1,0 +1,1 @@
+{ "Id": "rations", "Version": "0.1.0", "Api": 1, "Dependencies": ["questsim"], "StartingKit": { "rations:canned-beans": 2 } }

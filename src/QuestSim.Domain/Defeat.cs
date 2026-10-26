@@ -23,7 +23,7 @@ public sealed partial class WorldAuthority
         if (holder.StartsWith("actor:")) return State.Characters.Single(c => c.Id == holder).Inventory;
         if (holder.StartsWith("npc:")) return NamedFor(uint.Parse(holder[4..])).Inventory;
         if (holder.StartsWith("cache:")) return State.Caches.Single(k => k.Id == int.Parse(holder[6..])).Inventory;
-        if (holder == "vgm") return null;
+        if (holder is "vgm" or "consumed") return null;   // story source and consumption sink
         throw new InvalidOperationException("Unknown holder " + holder);
     }
 
@@ -36,8 +36,8 @@ public sealed partial class WorldAuthority
             if (source.GetValueOrDefault(item) < quantity) throw new InvalidOperationException($"{from} lacks {quantity} {item}");
             if ((source[item] -= quantity) == 0) source.Remove(item);
         }
-        var target = HolderInventory(to)!;
-        target[item] = target.GetValueOrDefault(item) + quantity;
+        var target = HolderInventory(to);
+        if (target is not null) target[item] = target.GetValueOrDefault(item) + quantity;
         State.Transfers.Add(new ItemTransfer(State.Tick, from, to, item, quantity, reason));
     }
 
@@ -152,6 +152,24 @@ public sealed partial class WorldAuthority
             Claim("cure", c.Id, c);
         }
         return "looted";
+    }
+
+    public ContentRegistry? Content { get; set; }
+
+    // U: use a consumable; its effect comes from the item definition (data), and the use is ledgered.
+    public string Use(int peer, string itemId)
+    {
+        var c = CharacterFor(peer);
+        if (itemId.Length == 0 && Content is not null)   // best consumable held: largest heal first
+            itemId = c.Inventory.Keys.Where(k => Content.Items.TryGetValue(k, out var d) && d.Kind == "consumable")
+                .OrderByDescending(k => Content.Items[k].Properties.GetValueOrDefault("heal")).ThenBy(k => k, StringComparer.Ordinal).FirstOrDefault() ?? "";
+        if (Content is null || !Content.Items.TryGetValue(itemId, out var item)) return "unknown_item";
+        if (item.Kind != "consumable") return "not_usable";
+        if (c.Inventory.GetValueOrDefault(itemId) < 1) return "none_left";
+        Transfer(c.Id, "consumed", itemId, 1, "use");
+        int heal = item.Properties.GetValueOrDefault("heal");
+        c.Stats[CharacterRecord.Health] = Math.Min(CharacterRecord.DefaultStats[CharacterRecord.Health], c.Stat(CharacterRecord.Health) + heal);
+        return "used";
     }
 
     void OnKilled(CharacterRecord killer, Npc npc)

@@ -90,6 +90,7 @@ public sealed class WorldSave
     public bool Permadeath { get; set; }
     public string PopulationFile { get; set; } = "";   // committed population snapshot beside the save, and its SHA-256
     public string PopulationHash { get; set; } = "";
+    public List<ModRecord> Mods { get; set; } = new();
     public List<Fact> Facts { get; set; } = new();
     public List<ItemTransfer> Transfers { get; set; } = new();
     public List<Opportunity> Opportunities { get; set; } = new();

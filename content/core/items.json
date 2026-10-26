@@ -1,0 +1,7 @@
+[
+  { "Id": "questsim:bandage", "Name": "Bandage", "Kind": "consumable", "Stackable": true, "Properties": { "heal": 25 } },
+  { "Id": "questsim:wall-panel", "Name": "Wall panel", "Kind": "material", "Stackable": true, "Properties": {} },
+  { "Id": "questsim:pistol", "Name": "Pistol", "Kind": "weapon", "Stackable": false, "Properties": { "damage": 30, "range": 40 } },
+  { "Id": "questsim:ammo-9mm", "Name": "9mm rounds", "Kind": "ammo", "Stackable": true, "Properties": {} },
+  { "Id": "questsim:antiviral", "Name": "Antiviral", "Kind": "medicine", "Stackable": true, "Properties": {} }
+]

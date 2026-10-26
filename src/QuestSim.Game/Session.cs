@@ -57,6 +57,7 @@ public partial class Session : Node
         public string Attack { get; set; } = "";
         public string Interact { get; set; } = "";
         public bool Ask { get; set; }
+        public bool Use { get; set; }
     }
 
     public override void _Ready()
@@ -84,13 +85,20 @@ public partial class Session : Node
                 Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
                 saveLock = new FileStream(savePath + ".lock", FileMode.OpenOrCreate, System.IO.FileAccess.ReadWrite, FileShare.None);
                 var save = WorldStorage.Load(savePath);
+                string modsDir = PathOption("mods", "mods");
+                string[] modDirs = Directory.Exists(modsDir) ? Directory.GetDirectories(modsDir).Order(StringComparer.Ordinal).ToArray() : [];
+                var content = ContentRegistry.Load([PathOption("content", "content/core"), .. modDirs]);
                 if (!File.Exists(savePath))
                 {
-                    // New worlds: a seeded million-agent population (configurable) and a basic starting kit.
+                    // New worlds: a seeded million-agent population (configurable), a basic starting kit plus mod kits.
                     save.Population = int.Parse(Option("population", "1000000"));
                     save.StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 24 };
+                    foreach (var (item, amount) in content.StartingKit) save.StartingKit[item] = save.StartingKit.GetValueOrDefault(item) + amount;
                 }
-                authority = new WorldAuthority(save);
+                content.Require(save.Mods);   // refuse to run a world without a mod it was made with
+                save.Mods = save.Mods.Concat(content.Mods.Where(m => save.Mods.All(r => r.Id != m.Id))).ToList();
+                GD.Print("CONTENT mods=" + string.Join(",", content.Mods.Select(m => $"{m.Id}@{m.Version}")) + $" items={content.Items.Count}");
+                authority = new WorldAuthority(save) { Content = content };
                 authority.LoadPopulation(savePath);
                 populationSaveSeconds = double.Parse(Option("population-save-seconds", "60"), System.Globalization.CultureInfo.InvariantCulture);
                 GD.Print($"POPULATION agents={save.Population} load={authority.PopulationLoad}");
@@ -134,6 +142,7 @@ public partial class Session : Node
                     view.BuildRequested += () => RequestBuild(false);
                     view.AttackRequested += kind => RequestAttack(kind);
                     view.AskRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestAsk)); };
+                    view.UseRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestUse), ""); };
                     view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
                 }
             }
@@ -322,6 +331,7 @@ public partial class Session : Node
         itemMessage = (kind, result) switch
         {
             ("rescue", "rescued") => "You freed your teammate.", ("loot", "looted") => "You took everything in the cache.",
+            ("use", "used") => "You patched yourself up.", ("use", _) => "Nothing to use.",
             ("rescue", _) => "Nobody to free here.", _ => "Nothing to take here."
         };
     }
@@ -333,6 +343,19 @@ public partial class Session : Node
         GD.Print("RETIRED ", reason);
         Disconnected(reason);
         network.Close();
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RequestUse(string itemId)
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        try
+        {
+            string result = authority.Use(peer, itemId);
+            RpcId(peer, nameof(InteractReply), "use", result, JsonSerializer.Serialize(authority.CharacterFor(peer).Inventory));
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("USE_REJECTED ", e.Message); }
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -576,6 +599,7 @@ public partial class Session : Node
         if (command.Attack.Length > 0) RequestAttack(command.Attack);
         if (command.Interact.Length > 0) RpcId(1, nameof(RequestInteract), command.Interact);
         if (command.Ask) RpcId(1, nameof(RequestAsk));
+        if (command.Use) RpcId(1, nameof(RequestUse), "");
         if (command.BuildRequestId.Length > 0 || command.RetryBuild)
             RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
         // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.

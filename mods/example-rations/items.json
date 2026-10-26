@@ -1,0 +1,3 @@
+[
+  { "Id": "rations:canned-beans", "Name": "Canned beans", "Kind": "consumable", "Stackable": true, "Properties": { "heal": 15 } }
+]
