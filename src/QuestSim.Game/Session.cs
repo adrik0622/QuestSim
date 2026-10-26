@@ -26,6 +26,7 @@ public partial class Session : Node
     private Key[] heldKeys = [];
     private PickupReceipt? lastPickup;
     private BuildReceipt? lastBuild;
+    private AttackResult? lastAttack;
     private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
@@ -49,6 +50,7 @@ public partial class Session : Node
         public string[] Keys { get; set; } = [];
         public string[] HoldKeys { get; set; } = [];
         public string Capture { get; set; } = "";
+        public string Attack { get; set; } = "";
     }
 
     public override void _Ready()
@@ -75,7 +77,14 @@ public partial class Session : Node
                 savePath = PathOption("save", ".artifacts/play/world.json");
                 Directory.CreateDirectory(Path.GetDirectoryName(savePath)!);
                 saveLock = new FileStream(savePath + ".lock", FileMode.OpenOrCreate, System.IO.FileAccess.ReadWrite, FileShare.None);
-                authority = new WorldAuthority(WorldStorage.Load(savePath));
+                var save = WorldStorage.Load(savePath);
+                if (!File.Exists(savePath))
+                {
+                    // New worlds: a seeded million-agent population (configurable) and a basic starting kit.
+                    save.Population = int.Parse(Option("population", "1000000"));
+                    save.StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 24 };
+                }
+                authority = new WorldAuthority(save);
                 network.SetBindIP(Option("bind", "127.0.0.1"));
                 error = network.CreateServer(port, 8);
                 Multiplayer.PeerDisconnected += OnPeerLeft;
@@ -114,6 +123,7 @@ public partial class Session : Node
                     AddChild(view);
                     view.PickupRequested += () => RequestPickup(false);
                     view.BuildRequested += () => RequestBuild(false);
+                    view.AttackRequested += kind => RequestAttack(kind);
                     view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
                 }
             }
@@ -262,6 +272,39 @@ public partial class Session : Node
         RpcId(1, nameof(PlaceWall), requestId, siteId);
     }
 
+    private void RequestAttack(string kind)
+    {
+        if (connected && own is not null) RpcId(1, nameof(Attack), kind);
+    }
+
+    // Attacks are not durable transactions: their effects (ammo, damage, deaths) persist with the next autosave.
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void Attack(string kind)
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        try
+        {
+            var result = authority.Attack(peer, kind);
+            RpcId(peer, nameof(AttackReply), JsonSerializer.Serialize(result), JsonSerializer.Serialize(authority.CharacterFor(peer).Inventory));
+            GD.Print($"ATTACK_RESULT peer={peer} kind={kind} result={result.Reason} target={result.TargetId}");
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("ATTACK_REJECTED ", e.Message); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void AttackReply(string resultJson, string inventoryJson)
+    {
+        if (server || own is null) return;
+        lastAttack = JsonSerializer.Deserialize<AttackResult>(resultJson, WorldStorage.JsonOptions);
+        own.Inventory = JsonSerializer.Deserialize<Dictionary<string, int>>(inventoryJson) ?? own.Inventory;
+        itemMessage = lastAttack?.Reason switch
+        {
+            "killed" => "Target down.", "hit" => $"Hit for {lastAttack.Damage}.", "miss" => "Missed.", "blocked" => "The shot hit a wall.",
+            "no_ammo" => "Out of ammo.", "no_weapon" => "No pistol.", "cooldown" => "Not ready yet.", _ => itemMessage
+        };
+    }
+
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void PlaceWall(string requestId, string siteId)
     {
@@ -345,10 +388,12 @@ public partial class Session : Node
         GD.Print($"ITEM_REPLY request={lastPickup.RequestId} result={lastPickup.Reason}");
     }
 
+    // Each joined player gets its own snapshot: every player plus only the NPCs near them.
     private void Publish()
     {
         snapshot = authority!.Snapshot();
-        Rpc(nameof(ReceiveSnapshot), JsonSerializer.Serialize(snapshot));
+        foreach (var (peer, _) in authority.ActivePeers)
+            RpcId(peer, nameof(ReceiveSnapshot), JsonSerializer.Serialize(authority.Snapshot(peer)));
     }
     private void OnPeerLeft(long peer)
     {
@@ -412,6 +457,7 @@ public partial class Session : Node
         desiredX = command.X; desiredZ = command.Z; desiredHeading = command.Heading; testSequence = command.Sequence;
         if (command.PickupRequestId.Length > 0 || command.RetryPickup)
             RequestPickup(command.RetryPickup, command.PickupRequestId, command.ContainerId);
+        if (command.Attack.Length > 0) RequestAttack(command.Attack);
         if (command.BuildRequestId.Length > 0 || command.RetryBuild)
             RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
         // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.
@@ -446,7 +492,8 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, itemMessage, fps = Engine.GetFramesPerSecond(),
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack,
+            npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));
     }

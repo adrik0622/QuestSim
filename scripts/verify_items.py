@@ -123,7 +123,7 @@ def run_recovery(fail_save):
             wait(lambda: f.status('alice')['snapshot'] is None,'failed-save server disconnected')
             assert f.status('alice')['lastPickup'] is None
             saved=read(f.save)
-            assert saved['Supplies'][0]['Count']==1 and not saved['Receipts'] and not saved['Characters'][0]['Inventory']
+            assert saved['Supplies'][0]['Count']==1 and not saved['Receipts'] and saved['Characters'][0]['Inventory'].get(ITEM, 0)==0
             assert 'Session.TakeItem' in (f.directory/'server.log').read_text()
             obstruction.rmdir()
             print('PASS failed server save never acknowledges success or replaces the valid world',flush=True)

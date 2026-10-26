@@ -51,6 +51,7 @@ class NetworkFixture:
             self.port = probe.getsockname()[1]
         self.save = self.directory / 'world.json'
         self.profiles = self.directory / 'profiles'
+        self.population = 0   # older suites assert exact actor counts; living-world suites set this
 
     def launch(self, label, profile=None, headless=True, profiles=None, save=None, intent=False):
         output = (self.directory / (label + '.log')).open('w')
@@ -61,7 +62,8 @@ class NetworkFixture:
             if headless or intent:
                 args += ['--intent-file=' + str(self.directory / (label + '-intent.json'))]
         else:
-            args += ['--server', '--save=' + str(save or self.save), '--shutdown-file=' + str(self.directory / (label + '-stop'))]
+            args += ['--server', '--save=' + str(save or self.save), '--shutdown-file=' + str(self.directory / (label + '-stop')),
+                     '--population=' + str(self.population)]
         started = time.monotonic()
         process = subprocess.Popen(args, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT)
         self.processes[label] = (process, output)

@@ -5,7 +5,9 @@ using System.Text.Json.Nodes;
 namespace QuestSim.Domain;
 
 public sealed record BlockRecord(string Id, double X, double Z, double Width, double Depth, double Height);
-public sealed record ActorState(string Id, string Name, double X, double Z, double Heading);
+public sealed record ActorState(string Id, string Name, double X, double Z, double Heading, int Kind = 0, int Faction = -1, int Health = 100);
+public sealed record AgentDelta(uint Index, int Health, bool Dead);
+public sealed record AttackResult(string Kind, bool Fired, string TargetId, int Damage, bool Killed, string Reason);
 public sealed record SupplyState(string Id, string ItemId, double X, double Z, int Count);
 public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
 public sealed record BuildReceipt(string RequestId, string ActorId, string SiteId, bool Success, string Reason, int Cost);
@@ -21,6 +23,11 @@ public sealed class CharacterRecord
     [JsonRequired] public double Heading { get; set; } = -Math.PI / 2;
     [JsonRequired] public Dictionary<string, int> Inventory { get; set; } = new();
     [JsonRequired] public int Experience { get; set; }
+    // Rudimentary RPG stats, data-defined by namespaced ID; missing entries use the defaults below.
+    public Dictionary<string, int> Stats { get; set; } = new();
+    public const string Health = "questsim:health", Strength = "questsim:strength", Agility = "questsim:agility", Perception = "questsim:perception";
+    public static readonly Dictionary<string, int> DefaultStats = new() { [Health] = 100, [Strength] = 10, [Agility] = 10, [Perception] = 10 };
+    public int Stat(string id) => Stats.TryGetValue(id, out int v) ? v : DefaultStats.GetValueOrDefault(id);
 }
 
 public sealed class WorldSave
@@ -40,6 +47,9 @@ public sealed class WorldSave
     [JsonRequired] public double HalfExtent { get; set; } = CityGen.Half;
     [JsonRequired] public ulong WorldSeed { get; set; } = DefaultSeed;
     [JsonRequired] public int Generator { get; set; } = CityGen.Version;
+    public int Population { get; set; }                        // coarse agents regenerated from WorldSeed; 0 = none
+    public List<AgentDelta> AgentDeltas { get; set; } = new();  // stored differences from the generated population
+    public Dictionary<string, int> StartingKit { get; set; } = new();
     [JsonRequired] public List<SupplyState> Supplies { get; set; } = InitialSupplies.ToList();
     [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<BuildReceipt> BuildReceipts { get; set; } = new();
@@ -59,7 +69,7 @@ public sealed class WorldSave
     };
 }
 
-public sealed class WorldAuthority
+public sealed partial class WorldAuthority
 {
     public const int ProtocolVersion = 4;
     public const int TickRate = 20;
@@ -72,7 +82,12 @@ public sealed class WorldAuthority
     private long snapshotSequence;
 
     public CityGen City { get; }
-    public WorldAuthority(WorldSave state) { WorldStorage.Validate(state); State = state; City = new CityGen(state.WorldSeed); }
+    public WorldAuthority(WorldSave state, bool synchronousPopulation = false)
+    {
+        WorldStorage.Validate(state); State = state; City = new CityGen(state.WorldSeed);
+        synchronous = synchronousPopulation;
+        if (state.Population > 0) StartPopulation();
+    }
 
     public CharacterRecord Join(int peer, string profileId, string name)
     {
@@ -89,7 +104,11 @@ public sealed class WorldAuthority
         character ??= new CharacterRecord { Id = "actor:" + Guid.NewGuid().ToString("N"), ProfileId = profileId, Name = name.Trim() };
         var safe = FindSafe(character.X, character.Z, character.Id);
         character.X = safe.X; character.Z = safe.Z;
-        if (created) State.Characters.Add(character);
+        if (created)
+        {
+            foreach (var (item, amount) in State.StartingKit) character.Inventory[item] = amount;
+            State.Characters.Add(character);
+        }
         active.Add(peer, character);
         return character;
     }
@@ -177,6 +196,7 @@ public sealed class WorldAuthority
     {
         if (ActiveCount == 0) return;
         State.Tick++;
+        StepLiving();
         foreach (var (peer, c) in active)
         {
             if (!intents.TryGetValue(peer, out var intent) || intent.Expires < State.Tick) continue;
@@ -186,6 +206,9 @@ public sealed class WorldAuthority
             if (IsSafe(c.X, c.Z + dz, c.Id)) c.Z += dz;
         }
     }
+
+    public IEnumerable<CharacterRecord> ActiveCharacters => active.Values;
+    public IEnumerable<(int Peer, CharacterRecord Character)> ActivePeers => active.Select(a => (a.Key, a.Value));
 
     public bool IsSafe(double x, double z, string exceptId = "") =>
         double.IsFinite(x) && double.IsFinite(z) && Math.Abs(x) <= State.HalfExtent - Radius && Math.Abs(z) <= State.HalfExtent - Radius &&
@@ -216,8 +239,14 @@ public sealed class WorldAuthority
         throw new InvalidOperationException("No safe re-entry position in this room");
     }
 
-    public WorldSnapshot Snapshot() => new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent,
-        State.Blocks.ToArray(), active.Values.OrderBy(c => c.Id).Select(c => new ActorState(c.Id, c.Name, c.X, c.Z, c.Heading)).ToArray(), State.Supplies.ToArray(), State.WorldSeed);
+    // Players are always included; NPCs only within view of the given peer (all detailed NPCs when peer is null).
+    public WorldSnapshot Snapshot(int? peer = null)
+    {
+        var viewer = peer is int p && active.TryGetValue(p, out var c) ? c : null;
+        var actors = active.Values.OrderBy(a => a.Id).Select(a => new ActorState(a.Id, a.Name, a.X, a.Z, a.Heading, 0, -1, a.Stat(CharacterRecord.Health)))
+            .Concat(NpcsVisibleTo(viewer, peer is null)).ToArray();
+        return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed);
+    }
 }
 
 public static class WorldStorage
@@ -302,6 +331,10 @@ public static class WorldStorage
             w.Supplies.Zip(WorldSave.InitialSupplies).Any(p => p.First is null || p.First with { Count = p.Second.Count } != p.Second ||
             p.First.Count < 0 || p.First.Count > p.Second.Count))
             throw new InvalidDataException("Invalid supply data");
+        if (w.Population is < 0 or > 4_000_000 || w.AgentDeltas is null || w.StartingKit is null ||
+            w.AgentDeltas.Any(d => d is null || d.Index >= w.Population || d.Health < 0) || w.AgentDeltas.Select(d => d.Index).Distinct().Count() != w.AgentDeltas.Count ||
+            w.StartingKit.Any(k => string.IsNullOrWhiteSpace(k.Key) || k.Value < 0) || w.Characters.Any(c => c.Stats is null || c.Stats.Any(x => string.IsNullOrWhiteSpace(x.Key))))
+            throw new InvalidDataException("Invalid population/stat data");
         var items = w.Supplies.Select(s => s.ItemId).ToHashSet();
         if (w.Receipts.Any(r => r is null || !Guid.TryParseExact(r.RequestId, "N", out var guid) || r.RequestId != guid.ToString("N") ||
             !w.Characters.Any(c => c.Id == r.ActorId) || string.IsNullOrWhiteSpace(r.ContainerId) || r.ContainerId.Length > 128 ||

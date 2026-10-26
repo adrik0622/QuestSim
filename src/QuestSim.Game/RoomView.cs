@@ -18,6 +18,7 @@ public partial class RoomView : Node3D
     private (int, int)? centreChunk;
     private const int ChunkRadius = 4;
     public event Action? PickupRequested, BuildRequested, RetryRequested;
+    public event Action<string>? AttackRequested;
 
     public override void _Ready()
     {
@@ -105,9 +106,16 @@ public partial class RoomView : Node3D
     {
         var actor = new Node3D { Position = new Vector3((float)state.X, 0, (float)state.Z) };
         AddChild(actor);
-        Color shirt = local ? new Color(.3f, .65f, 1) : new Color(.95f, .6f, .35f);
+        // Players: blue (you) / orange (others). NPC humans by faction; zombies grey-green.
+        Color shirt = state.Kind switch
+        {
+            0 => local ? new Color(.3f, .65f, 1) : new Color(.95f, .6f, .35f),
+            2 => new Color(.3f, .33f, .28f),
+            _ => state.Faction switch { 0 => new Color(.45f, .55f, .7f), 1 => new Color(.75f, .65f, .4f), _ => new Color(.6f, .12f, .15f) }
+        };
+        Color skin = state.Kind == 2 ? new Color(.45f, .6f, .4f) : new Color(1, .8f, .6f);
         Box(actor, new Vector3(0, 1.25f, 0), new Vector3(.48f, .6f, .28f), shirt);
-        Box(actor, new Vector3(0, 1.75f, 0), new Vector3(.36f, .36f, .32f), new Color(1, .8f, .6f));
+        Box(actor, new Vector3(0, 1.75f, 0), new Vector3(.36f, .36f, .32f), skin);
         Box(actor, new Vector3(0, 1.75f, -.2f), new Vector3(.12f, .12f, .1f), Colors.Black);
         foreach (int side in new[] { -1, 1 })
         {
@@ -128,8 +136,9 @@ public partial class RoomView : Node3D
         Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move | Q/E turn/orbit | Up/Down tilt | C camera | R camera | F take | B build | T retry\n" +
+            "WASD move | Q/E turn | Up/Down tilt | C/R camera | F take | B build | T retry | V melee | G shoot\n" +
             $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s\n" +
+            $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
             $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}";
         if (state is null) return;
         if (!roomBuilt) BuildRoom(state);
@@ -170,6 +179,8 @@ public partial class RoomView : Node3D
         if (key.Keycode == Key.F) PickupRequested?.Invoke();
         if (key.Keycode == Key.B) BuildRequested?.Invoke();
         if (key.Keycode == Key.T) RetryRequested?.Invoke();
+        if (key.Keycode == Key.V) AttackRequested?.Invoke("melee");
+        if (key.Keycode == Key.G) AttackRequested?.Invoke("shoot");
         if (key.Keycode == Key.C) firstPerson = !firstPerson;
         if (key.Keycode == Key.R) { Yaw = -Mathf.Pi / 2; elevation = .65f; }
     }
