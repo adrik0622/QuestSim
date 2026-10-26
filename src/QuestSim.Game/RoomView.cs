@@ -32,11 +32,12 @@ public partial class RoomView : Node3D
         environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color(.12f, .17f, .23f),
-            AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = Colors.White, AmbientLightEnergy = .65f
+            AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = Colors.White, AmbientLightEnergy = .65f,
+            FogEnabled = true, FogDensity = .004f, FogLightColor = new Color(.45f, .62f, .85f)
         };
         AddChild(new WorldEnvironment { Environment = environment });
         AddChild(sun);
-        AddChild(camera); camera.Current = true; camera.Fov = 75; camera.Near = .1f; camera.Far = 2500;
+        AddChild(camera); camera.Current = true; camera.Fov = 75; camera.Near = .1f; camera.Far = 1500;
         camera.Position = new Vector3(-8, 6, 0); camera.LookAt(new Vector3(0, 1, 0));
         var layer = new CanvasLayer(); AddChild(layer);
         layer.AddChild(hudBack);
@@ -50,15 +51,13 @@ public partial class RoomView : Node3D
     }
     private void BuildRoom(WorldSnapshot state)
     {
-        Box(this, new Vector3(0, -.1f, 0), new Vector3(12, .2f, 12), new Color(.25f, .28f, .3f));
+        Box(this, new Vector3(0, -.08f, 0), new Vector3(12, .2f, 12), new Color(.25f, .28f, .3f));   // floor top 2 cm above the city ground
         city = new CityGen(state.WorldSeed);
-        var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.Half * 2, CityGen.Half * 2) }, Position = new Vector3(0, -.3f, 0),   // well below chunk ground: no z-fighting at a distance
-            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(.35f, .5f, .25f), Roughness = 1 } };
-        AddChild(ground);
+        // Ground is drawn per streamed chunk only (no overlapping layers to z-fight); fog hides the streaming edge.
         foreach (var road in city.Roads)
         {
             var from = new Vector3(road.X1, 0, road.Z1); var to = new Vector3(road.X2, 0, road.Z2);
-            var strip = Box(this, (from + to) / 2 + new Vector3(0, -.06f, 0), new Vector3(CityGen.RoadHalfWidth * 2, .12f, from.DistanceTo(to)), new Color(.2f, .2f, .22f));
+            var strip = Box(this, (from + to) / 2 + new Vector3(0, -.01f, 0), new Vector3(CityGen.RoadHalfWidth * 2, .12f, from.DistanceTo(to)), new Color(.2f, .2f, .22f));
             strip.Rotation = new Vector3(0, Mathf.Atan2(to.X - from.X, to.Z - from.Z), 0);
         }
         var site = WorldSave.BuildSite; // Floor marker for the one build cell.
@@ -90,12 +89,13 @@ public partial class RoomView : Node3D
         AddChild(node);
         int x0 = cx * CityGen.ChunkSize, z0 = cz * CityGen.ChunkSize, half = CityGen.ChunkSize / 2;
         var biome = city!.BiomeAt(x0 + half, z0 + half);
-        if (biome != Biome.Field)
+        var colour = biome switch
         {
-            var colour = biome switch { Biome.Urban => new Color(.3f, .31f, .33f), Biome.Town => new Color(.42f, .4f, .35f), _ => new Color(.17f, .33f, .17f) };
-            node.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.ChunkSize, CityGen.ChunkSize) }, Position = new Vector3(x0 + half, -.02f, z0 + half),
-                MaterialOverride = new StandardMaterial3D { AlbedoColor = colour, Roughness = 1 } });
-        }
+            Biome.Urban => new Color(.3f, .31f, .33f), Biome.Town => new Color(.42f, .4f, .35f),
+            Biome.Forest => new Color(.17f, .33f, .17f), _ => new Color(.35f, .5f, .25f)
+        };
+        node.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.ChunkSize, CityGen.ChunkSize) }, Position = new Vector3(x0 + half, 0, z0 + half),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = colour, Roughness = 1 } });
         var buildings = city.Chunk(cx, cz);
         if (buildings.Length == 0) return node;
         var multi = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = new BoxMesh { Size = Vector3.One } };
@@ -138,11 +138,52 @@ public partial class RoomView : Node3D
         sun.LightEnergy = .15f + .85f * daylight;
         sun.RotationDegrees = new Vector3(-10 - 60 * daylight, (float)(hour / 24 * 360), 0);
         environment!.BackgroundColor = new Color(.02f, .03f, .06f).Lerp(new Color(.45f, .62f, .85f), daylight);
+        environment.FogLightColor = environment.BackgroundColor;
         environment.AmbientLightEnergy = .25f + .45f * daylight;
         clock = $"{(int)hour:00}:{(int)(hour % 1 * 60):00}";
     }
 
     private string clock = "";
+    // Crowd placeholders: one batched mesh; figures glide toward their latest positions and hide when a real NPC shows them.
+    private MultiMeshInstance3D? crowd;
+    private CrowdWire.Figure[] crowdFigures = [];
+    private readonly Dictionary<uint, Vector3> crowdShown = new();
+
+    public void UpdateCrowd(CrowdWire.Figure[] figures)
+    {
+        crowdFigures = figures;
+        if (crowd is null)
+        {
+            crowd = new MultiMeshInstance3D
+            {
+                Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = new BoxMesh { Size = new Vector3(.45f, 1.7f, .3f) } },
+                MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 1 }
+            };
+            AddChild(crowd);
+        }
+        var keep = figures.Select(f => f.Index).ToHashSet();
+        foreach (var gone in crowdShown.Keys.Where(k => !keep.Contains(k)).ToArray()) crowdShown.Remove(gone);
+    }
+
+    private void DrawCrowd(double delta)
+    {
+        if (crowd is null) return;
+        var visible = actors.Keys.Where(k => k.StartsWith("npc:")).Select(k => uint.Parse(k.AsSpan(4))).ToHashSet();
+        var shown = crowdFigures.Where(f => !visible.Contains(f.Index)).ToArray();
+        var multi = crowd.Multimesh;
+        multi.InstanceCount = shown.Length;
+        float blend = 1 - Mathf.Exp(-3 * (float)delta);
+        for (int i = 0; i < shown.Length; i++)
+        {
+            var f = shown[i];
+            var target = new Vector3((float)f.X, .85f, (float)f.Z);
+            var at = crowdShown.TryGetValue(f.Index, out var p) ? p.Lerp(target, blend) : target;
+            crowdShown[f.Index] = at;
+            multi.SetInstanceTransform(i, new Transform3D(Basis.Identity, at));
+            multi.SetInstanceColor(i, f.Zombie ? new Color(.35f, .45f, .32f) : f.Faction switch
+                { 0 => new Color(.42f, .5f, .62f), 1 => new Color(.62f, .55f, .38f), _ => new Color(.5f, .15f, .17f) });
+        }
+    }
     private readonly Dictionary<int, Node3D> caches = new();
     private static string Condition(WorldSnapshot? state, string ownId) =>
         state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Condition is { Length: > 0 } c ? $" ({c})" : "";
@@ -205,6 +246,7 @@ public partial class RoomView : Node3D
         if ((inspectorSeconds -= delta) <= 0) inspector.Visible = false;
         if (state is null) return;
         ApplyTimeOfDay(state.Tick);
+        DrawCrowd(delta);
         if (!roomBuilt) BuildRoom(state);
         UpdateCaches(state);
         // Blocks only appear (no demolition yet); draw any the server added since the last snapshot.

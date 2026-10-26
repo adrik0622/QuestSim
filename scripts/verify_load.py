@@ -40,7 +40,9 @@ try:
               'detailedNpcs': status['npcs'], 'meanVisibleNpcs': round(sum(npc_counts) / len(npc_counts), 1),
               'meanActorPacketBytes': round(mean), 'meanActorsAsJsonBytes': round(sum(json_sizes) / len(json_sizes)),
               'worldJsonBytesPerSecond': round(world_rate), 'approxDownloadKiBps': round((mean * 10 + world_rate) / 1024, 1),
-              'serverRssMiB': round(status['rssBytes'] / 2**20)}
+              'serverRssMiB': round(status['rssBytes'] / 2**20),
+              'meanCrowdFigures': round(sum(f.status(l)['crowdCount'] for l in labels) / len(labels)),
+              'crowdBytesPerSecond': round(sum(f.status(l)['crowdBytes'] for l in labels) / len(labels))}
     print(json.dumps(result), flush=True)
     assert rate > 18 and status['populationLagged'] == 0, result
     print(f"PASS {PLAYERS} players and 1,000,000 agents: {rate:.1f} ticks/s, no population lag, {status['npcs']} detailed NPCs, "

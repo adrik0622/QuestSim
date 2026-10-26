@@ -92,10 +92,12 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
   as zombies, survivors arrive at outlying towns, zombies migrate in from the map edges; rates
   are tunable and persisted.
 
-### F17 - NPC pop-in and crowd placeholders
-- Avoid promoting NPCs right next to players (nobody appears out of nowhere at arm's length).
-- Stretch: stream nearby background (coarse) agents to clients at ~1 Hz as cheap placeholder
-  figures, so crowds look populated beyond the detail budget.
+### F17 - NPC pop-in and crowd placeholders — done 2026-10-26
+- No promotions within 20 m of a player (applied after stepping out of buildings).
+- Crowd placeholders: each second the server sends every player the nearest 1,500 background
+  agents within 200 m (9 bytes each: ID, relative position, kind/faction; ~13 KB/s per player
+  measured with 8 players); clients draw them as simple figures that glide between updates
+  and hide when the same person is shown in detail.
 
 ### Not in v1.0
 Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS, code mods (data-only for now; stay mindful of a later transition).

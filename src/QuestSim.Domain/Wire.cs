@@ -59,3 +59,41 @@ public static class Wire
         return (sequence, tick, actors);
     }
 }
+
+// Background crowd: nearby coarse agents as placeholders (no interaction), sent about once per second.
+public static class CrowdWire
+{
+    public sealed record Figure(uint Index, double X, double Z, bool Zombie, int Faction);
+
+    public static byte[] Encode(double viewerX, double viewerZ, IReadOnlyList<Figure> figures)
+    {
+        using var buffer = new MemoryStream();
+        using var w = new BinaryWriter(buffer);
+        w.Write((byte)1); w.Write(viewerX); w.Write(viewerZ); w.Write((ushort)figures.Count);
+        foreach (var f in figures)
+        {
+            w.Write(f.Index);
+            w.Write((short)Math.Clamp(Math.Round((f.X - viewerX) * 10), short.MinValue, short.MaxValue));
+            w.Write((short)Math.Clamp(Math.Round((f.Z - viewerZ) * 10), short.MinValue, short.MaxValue));
+            w.Write((byte)((f.Zombie ? 0x80 : 0) | (f.Faction & 0x0F)));
+        }
+        w.Flush();
+        return buffer.ToArray();
+    }
+
+    public static Figure[] Decode(byte[] data)
+    {
+        using var r = new BinaryReader(new MemoryStream(data));
+        if (r.ReadByte() != 1) throw new InvalidDataException("Unknown crowd packet version");
+        double x = r.ReadDouble(), z = r.ReadDouble();
+        var figures = new Figure[r.ReadUInt16()];
+        for (int i = 0; i < figures.Length; i++)
+        {
+            uint index = r.ReadUInt32();
+            double fx = x + r.ReadInt16() / 10.0, fz = z + r.ReadInt16() / 10.0;
+            byte kind = r.ReadByte();
+            figures[i] = new Figure(index, fx, fz, (kind & 0x80) != 0, kind & 0x0F);
+        }
+        return figures;
+    }
+}

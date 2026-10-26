@@ -12,7 +12,8 @@ public partial class Session : Node
     private RoomView? view;
     private WorldSnapshot? snapshot, world;
     private readonly Dictionary<long, string> sentWorld = new();
-    private long worldBytes, actorPacketBytes;
+    private long worldBytes, actorPacketBytes, sentCrowdVersion, crowdBytes;
+    private int crowdCount;
     private CharacterRecord? own;
     private string profileId = "", profileName = "", savePath = "", statusPath = "", intentPath = "", shutdownPath = "";
     private string connection = "Connecting";
@@ -236,6 +237,16 @@ public partial class Session : Node
         world = received;
         worldBytes += json.Length;
         if (snapshot is not null) snapshot = world with { Actors = snapshot.Actors, Sequence = snapshot.Sequence, Tick = snapshot.Tick };
+    }
+
+    // Crowd placeholders: background people near you, about once per second, purely visual.
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = 4)]
+    public void ReceiveCrowd(byte[] data)
+    {
+        if (server) return;
+        var figures = CrowdWire.Decode(data);
+        crowdCount = figures.Length; crowdBytes = data.Length;
+        view?.UpdateCrowd(figures);
     }
 
     // Actors: compact binary at 10 Hz, unreliable ordered; stale packets are dropped by sequence.
@@ -547,6 +558,11 @@ public partial class Session : Node
             RpcId(peer, nameof(ReceiveActors), Wire.EncodeActors(view.Sequence, view.Tick, view.Actors,
                 i => authority.State.Named.Any(n => n.Index == i && n.Title.Length > 0)));
         }
+        if (authority.CrowdVersion != sentCrowdVersion)
+        {
+            sentCrowdVersion = authority.CrowdVersion;
+            foreach (var (peer, packet) in authority.CrowdPackets) RpcId(peer, nameof(ReceiveCrowd), packet);
+        }
     }
     private void OnPeerLeft(long peer)
     {
@@ -690,7 +706,7 @@ public partial class Session : Node
             characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk, lastInspect,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
             npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
-            actorPacketBytes, worldBytes, populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),
+            actorPacketBytes, worldBytes, crowdCount, crowdBytes, populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));
     }

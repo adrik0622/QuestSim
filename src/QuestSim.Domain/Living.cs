@@ -25,6 +25,12 @@ public sealed partial class WorldAuthority
     public IReadOnlyDictionary<uint, Npc> Npcs => npcs;
     public long PopulationLagged { get; private set; }
     public Action<CharacterRecord, Npc>? Downed;
+    public const double CrowdRadius = 200;
+    public const int CrowdLimit = 1500;
+    // Latest crowd placeholder packet per peer, built between coarse ticks; CrowdVersion changes when they refresh.
+    public Dictionary<int, byte[]> CrowdPackets { get; } = new();
+    public long CrowdVersion { get; private set; }
+
     // Nobody is promoted within this distance of a player, so new NPCs never pop in at arm's length.
     public double PromotionClearance { get; set; } = 20;
 
@@ -50,6 +56,7 @@ public sealed partial class WorldAuthority
         ReportLosses();
         ApplyPossessions();
         SyncTiers();
+        BuildCrowds();
         PrepareRumors();
         if (PopulationSaveRequested) CapturePopulation();
         var rumors = RumorInput();
@@ -94,6 +101,20 @@ public sealed partial class WorldAuthority
                 };
                 pop.Info[i] |= Population.Detailed;
             }
+    }
+
+    void BuildCrowds()
+    {
+        var pop = Pop!;
+        CrowdPackets.Clear();
+        foreach (var (peer, c) in active)
+        {
+            var figures = pop.Near(c.X, c.Z, CrowdRadius).Where(i => (pop.Info[i] & Population.Detailed) == 0)
+                .Select(i => new CrowdWire.Figure(i, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]), Population.IsZombie(pop.Info[i]), Population.FactionOf(pop.Info[i])))
+                .OrderBy(f => (f.X - c.X) * (f.X - c.X) + (f.Z - c.Z) * (f.Z - c.Z)).ThenBy(f => f.Index).Take(CrowdLimit).ToArray();
+            CrowdPackets[peer] = CrowdWire.Encode(c.X, c.Z, figures);
+        }
+        CrowdVersion++;
     }
 
     bool FindWalkable(ref double x, ref double z)

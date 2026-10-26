@@ -43,5 +43,12 @@ interest management only), Godot exports and Windows *game* runs (only domain ch
 Windows), LAN/WAN (8-player loopback load done), item instances/rarity, code mods. verify_item_desktop/verify_shared_desktop/
 verify_terminal_shutdown (real desktop) not rerun.
 
-Next action: director reviews NIGHTLY_2026-10-26.md decisions, plays the nightly build, and
-decides whether to merge `nightly` into `main`.
+2026-10-26 (after the playtest, on main; nightly merged): ground flicker fixed (per-chunk
+ground only, fog at the streaming edge); no promotions within 20 m; coarse agents walk at
+real-time speed (48:1 applies to the clock); population recovery (dormant reserve, rising
+dead, arrivals); crowd placeholders; local-first `scripts/test_all.sh` (GitHub workflow
+manual-only). Full local suite green: 124 domain checks, all ENet suites, living, both Xvfb
+screens, E1 checks.
+
+Next action: director playtests again (flicker, pop-in, placeholders); then choose the next
+task, e.g. F15 extensive building, or Windows verification once the machine is reachable.
