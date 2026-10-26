@@ -137,14 +137,14 @@ public sealed partial class WorldAuthority
                 double sight = npc.Zombie ? 18 : 25;
                 prey = players.Where(p => !IsCaptive(p) && Distance(p.X, p.Z, npc.X, npc.Z) <= sight).OrderBy(p => Distance(p.X, p.Z, npc.X, npc.Z)).ThenBy(p => p.Id).FirstOrDefault();
             }
-            if (prey is null && npc.Zombie && !npc.Dead)
+            if (prey is null && !npc.Dead)
             {
-                // Rival hordes fight where their territories meet.
-                var rival = npcs.Values.Where(r => r.Zombie && !r.Dead && r.Faction != npc.Faction && Distance(r.X, r.Z, npc.X, npc.Z) <= 6)
+                // Factions act on each other: zombies and humans fight, the Choir fights everyone, rival hordes clash.
+                var rival = npcs.Values.Where(r => !r.Dead && r != npc && Enemies(npc, r) && Distance(r.X, r.Z, npc.X, npc.Z) <= 6)
                     .OrderBy(r => Distance(r.X, r.Z, npc.X, npc.Z)).ThenBy(r => r.Index).FirstOrDefault();
                 if (rival is not null)
                 {
-                    if (Distance(rival.X, rival.Z, npc.X, npc.Z) > 1.1) MoveNpc(npc, rival.X, rival.Z, 1.6);
+                    if (Distance(rival.X, rival.Z, npc.X, npc.Z) > 1.1) MoveNpc(npc, rival.X, rival.Z, npc.Zombie ? 1.6 : 2.1);
                     else if (npc.Cooldown == 0)
                     {
                         npc.Cooldown = 24;
@@ -153,7 +153,7 @@ public sealed partial class WorldAuthority
                         RecordDelta(rival.Index, rival.Health, rival.Dead);
                         if (rival.Dead)
                         {
-                            AddFact("horde-clash", $"npc:{npc.Index}", $"npc:{rival.Index}", rival.X, rival.Z);
+                            AddFact(npc.Zombie && rival.Zombie ? "horde-clash" : "clash", $"npc:{npc.Index}", $"npc:{rival.Index}", rival.X, rival.Z);
                             DropCarried(rival);
                         }
                     }
@@ -180,6 +180,11 @@ public sealed partial class WorldAuthority
             if (!MoveNpc(npc, npc.WanderX, npc.WanderZ, .8)) npc.Wandering = false;
         }
     }
+
+    static bool Enemies(Npc a, Npc b) =>
+        a.Zombie != b.Zombie ||                                                         // the living and the dead
+        (a.Zombie && b.Zombie && a.Faction != b.Faction) ||                             // rival hordes
+        (!a.Zombie && !b.Zombie && (a.Faction == Population.Hostile) != (b.Faction == Population.Hostile));   // the Choir vs everyone
 
     bool MoveNpc(Npc npc, double tx, double tz, double speed)
     {

@@ -236,7 +236,9 @@ flowchart LR
 
 The same individual moves between tiers without being lost, duplicated or reset. Agents within 120 m of a
 player are simulated at 20 Hz (zombies and hostile factions hunt, others go about their business) and
-return to the coarse 1 Hz population tick when players move more than 180 m away.
+return to the coarse 1 Hz population tick when players move more than 180 m away. Factions also act on
+each other: zombies and humans fight, the Hollow Choir fights everyone, and the two horde factions hold
+separate territories and clash where they meet. Days pass at 48:1, and people head home at night.
 
 ### Defeat instead of death
 
@@ -245,7 +247,8 @@ flowchart TD
     D["Player downed"] --> W{"Who won?"}
     W -- "zombies" --> I["Infected + injured,<br/>wake in the starter room"]
     I --> CURE["Game master invents an antiviral stash<br/>(cure opportunity)"]
-    I -- "untreated" --> T["Turned: gear left in remains,<br/>new character"]
+    I -- "untreated" --> T["Turned: your body roams as a named zombie<br/>carrying your gear; new character"]
+    T --> REST["'Put them to rest' opportunity<br/>(recover the gear)"]
     W -- "Hollow Choir or a hostile faction" --> C["Captured where they fell"]
     C --> V["Victor takes the actual items,<br/>gains a title and becomes a named NPC"]
     C --> R["Rescue opportunity<br/>(a teammate frees you)"]
@@ -310,6 +313,8 @@ bash scripts/run_client.sh bob
 | G | Fire the pistol |
 | H | Ask the nearest person what they've heard |
 | U | Use your best healing item |
+| I | Inspect the nearest NPC (debug view) |
+| Shift | Sprint |
 
 Close a client to leave, and relaunch the same profile name to return as the same character. World
 time pauses when nobody is connected. Play data is kept in `.artifacts/play/`.

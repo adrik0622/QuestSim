@@ -112,6 +112,13 @@ public static class LivingChecks
               Enumerable.Range(0, 40).All(h => w.Pop.HordeTarget((uint)h, 0) % 2 == h % 2),
             $"rival horde factions keep separate territories and fight where they meet ({Population.FactionNames[mass.Faction]} vs {Population.FactionNames[rival.Faction]})");
 
+        var walker = Summon(w, true, alice.X + 40, alice.Z + 10);
+        var local = Summon(w, false, alice.X + 42, alice.Z + 10, faction: 0);
+        int before = w.State.Facts.Count;
+        for (int k = 0; k < 600 && !walker.Dead && !local.Dead; k++) w.Step();
+        check((walker.Dead || local.Dead) && w.State.Facts.Skip(before).Any(f => f.Kind == "clash"),
+            $"zombies and humans fight each other out of the players' sight ({(walker.Dead ? "the zombie" : local.Name)} fell)");
+
         bool downed = false;
         alice.X = -3; alice.Z = 0;
         alice.Stats[CharacterRecord.Health] = 5;
