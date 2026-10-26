@@ -43,3 +43,4 @@ LivingChecks.Run(Check);
 DefeatChecks.Run(Check);
 RumorChecks.Run(Check);
 ContentChecks.Run(Check);
+AcceptanceChecks.Run(Check);
