@@ -10,6 +10,7 @@ public partial class MapView : Control
     private List<Settlement> settlements = [];
     private List<(int A, int B)> links = [];
     private SettlementInfo[] infos = [];
+    private FactionInfo[] factions = [];
     private Vector2 player;
     private Rect2 bounds;
     private float reach = 1;
@@ -25,9 +26,10 @@ public partial class MapView : Control
         bounds.End = new Vector2(points.Max(p => p.X) + margin, points.Max(p => p.Y) + margin);
     }
 
-    public void UpdateMap(SettlementInfo[]? state, Vector2 position)
+    public void UpdateMap(SettlementInfo[]? state, FactionInfo[]? factionState, Vector2 position)
     {
         infos = state ?? [];
+        factions = factionState ?? [];
         player = position;
         if (Visible) QueueRedraw();
     }
@@ -75,6 +77,17 @@ public partial class MapView : Control
             if (info is { Short: not 0 }) DrawArc(at, radius + 3, 0, Mathf.Tau, 24, (info.Short & 1) != 0 ? new Color(1, .2f, .2f) : new Color(1, .6f, .2f), 2);
             if (info is not null) DrawRect(new Rect2(at + new Vector2(-radius, radius + 2), new Vector2(2 * radius * info.Order / 100f, 2)), new Color(.6f, .9f, .6f));
             if (at.DistanceTo(mouse) < best) { best = at.DistanceTo(mouse); hovered = info; }
+        }
+        // Factions: relations with the others (F20) and the last daily move.
+        float y = 128;
+        if (factions.Any(f => f.Relations is not null)) DrawRect(new Rect2(GetViewportRect().Size.X - 440, 108, 430, 186), new Color(0, 0, 0, .8f));
+        foreach (var f in factions.Where(f => f.Id < 3 && f.Relations is not null))
+        {
+            DrawString(ThemeDB.FallbackFont, new Vector2(GetViewportRect().Size.X - 430, y), f.Name, HorizontalAlignment.Left, -1, 15, FactionColours[f.Id]);
+            DrawMultilineString(ThemeDB.FallbackFont, new Vector2(GetViewportRect().Size.X - 430, y + 18),
+                string.Join("  ", Enumerable.Range(0, 3).Where(o => o != f.Id).Select(o => $"{factions[o].Name.Split(' ')[^1]} {f.Relations![o]:+0;-0}")) +
+                (f.LastMove.Length > 0 ? $"\n{f.LastMove}" : ""), HorizontalAlignment.Left, 420, 13, -1, new Color(.8f, .8f, .8f));
+            y += 58;
         }
         var me = ToScreen(player.X, player.Y, frame);
         DrawCircle(me, 5, Colors.White);

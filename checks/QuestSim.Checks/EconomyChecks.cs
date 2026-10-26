@@ -24,8 +24,8 @@ public static class EconomyChecks
         var profiles = states.GroupBy(s => s.Profile).ToDictionary(g => g.Key, g => g.Count());
         check(states.Count == pop.Settlements.Count && profiles.Count == 4 &&
               pop.Settlements.Where(s => city.BiomeAt(s.X, s.Z) != Biome.Urban).All(s => states[s.Index].Profile == Economy.Farm) &&
-              states.All(s => pop.Residents[s.Index] == 0 || Economy.Days10(s, pop.Residents[s.Index], Good.Food) is >= 49 and <= 101),
-            $"every settlement gets a profile ({string.Join(", ", profiles.OrderBy(p => p.Key).Select(p => $"{Economy.ProfileNames[p.Key]} {p.Value}"))}; countryside farms) and 5-10 days of stock");
+              states.All(s => pop.Residents[s.Index] == 0 || Economy.Days10(s, pop.Residents[s.Index], Good.Food) is >= 29 and <= 61),
+            $"every settlement gets a profile ({string.Join(", ", profiles.OrderBy(p => p.Key).Select(p => $"{Economy.ProfileNames[p.Key]} {p.Value}"))}; countryside farms) and 3-6 days of stock");
 
         // Same seed, same history; goods only appear or vanish through production, consumption and spoilage.
         var before = Enumerable.Range(0, Economy.Goods).Select(g => Total(states, g)).ToArray();
@@ -52,21 +52,17 @@ public static class EconomyChecks
         Hours(restored, restoredStates, ref restoredHour, 3);
         check(Json(states) == Json(restoredStates) && pop.Residents.SequenceEqual(restored.Residents), "save mid-run and reload continues exactly like running straight");
 
-        // Everyday sharing: a well-stocked settlement passes food along a road to an allied neighbour, never to a rival.
+        // Faction logistics: a well-stocked settlement's surplus reaches a hungry one of the same faction, never a rival.
         int giver = Enumerable.Range(0, states.Count).First(s => pop.Residents[s] > 0 && pop.Neighbours(s).Any(b => Economy.Allied(pop, s, b) && pop.Residents[b] > 0));
         int taker = pop.Neighbours(giver).First(b => Economy.Allied(pop, giver, b) && pop.Residents[b] > 0);
         states[giver].Stock[0] = pop.Residents[giver] * 1000L * 25; states[taker].Stock[0] = 0;
         Economy.Hour(pop, states, ++hour, new());
-        check(states[taker].Stock[0] > 0, $"allied neighbours share along the road (settlement {giver} fed {taker})");
-        int choir = Enumerable.Range(0, states.Count).FirstOrDefault(s => pop.SettlementFaction[s] == Population.Hostile && pop.Residents[s] > 0 &&
-            pop.Neighbours(s).All(b => pop.SettlementFaction[b] != Population.Hostile), -1);
-        if (choir >= 0)
-        {
-            foreach (int b in pop.Neighbours(choir)) states[b].Stock[0] = pop.Residents[b] * 1000L * 25;
-            states[choir].Profile = Economy.Mixed; states[choir].Stock[0] = 0;
-            Economy.Hour(pop, states, ++hour, new());
-            check(states[choir].Stock[0] == 0, "the Hollow Choir gets nothing from its non-Choir neighbours");
-        }
+        check(states[taker].Stock[0] > 0, $"faction logistics move surplus to need (settlement {giver} fed {taker})");
+        var choirSettlements = Enumerable.Range(0, states.Count).Where(s => pop.SettlementFaction[s] == Population.Hostile).ToArray();
+        foreach (int c in choirSettlements) { states[c].Profile = Economy.Mixed; states[c].Stock[0] = 0; }
+        foreach (int b in choirSettlements.SelectMany(pop.Neighbours).Where(b => pop.SettlementFaction[b] != Population.Hostile)) states[b].Stock[0] = pop.Residents[b] * 1000L * 25;
+        Economy.Hour(pop, states, ++hour, new());
+        check(choirSettlements.All(c => states[c].Stock[0] == 0), $"goods never cross between factions on their own (the starving Choir's {choirSettlements.Length} settlements get nothing from rich neighbours)");
 
         // A settlement that runs out reports a shortage; after a hungry day in unrest people leave for the best-fed allied
         // neighbour; supplies arriving end the shortage.
@@ -85,10 +81,11 @@ public static class EconomyChecks
             "running out of food reports a shortage, lowers order and counts hungry hours");
         check(moved.Refugees > 0 && pop.Residents[hungry] == residentsBefore - moved.Refugees && refugees.Length >= moved.Refugees,
             $"after a hungry day in unrest, people leave for a better-fed neighbour and join it ({moved.Refugees} of {residentsBefore} this hour)");
-        s0.Stock[0] = pop.Residents[hungry] * 1000L * 10;
+        foreach (var x in states.Where(x => pop.SettlementFaction[x.Index] == pop.SettlementFaction[hungry])) x.Stock[0] = pop.Residents[x.Index] * 1000L * 10;
         events.Clear();
         Economy.Hour(pop, states, ++hour, events);
-        check(events.Contains(new EconomyEvent("recovered", hungry, Good.Food)) && (s0.Reported & 1) == 0, "supplies arriving end the shortage (a recovery fact)");
+        check(events.Any(e => e.Kind == "recovered" && e.Good == Good.Food && pop.SettlementFaction[e.Settlement] == pop.SettlementFaction[hungry]) && (s0.Reported & 1) == 0,
+            "supplies arriving end the faction's shortage (one recovery fact)");
         check(Economy.Price(s0, pop.Residents[hungry], Good.Food) < Economy.Price(new SettlementState { Stock = [1000, 0, 0, 0] }, pop.Residents[hungry], Good.Food),
             "prices rise as stock runs low");
 
@@ -98,8 +95,9 @@ public static class EconomyChecks
         Steps(world, WorldAuthority.PopulationEvery);
         int plaza = world.Pop!.Settlements.First(s => s.Spawn).Index;
         var home = world.State.Settlements[plaza];
-        home.Profile = Economy.Mixed; home.Stock[0] = 0;
-        foreach (int b in world.Pop.Neighbours(plaza)) world.State.Settlements[b].Stock[0] = 0;
+        home.Profile = Economy.Mixed;
+        foreach (var s in world.State.Settlements.Where(s => world.Pop.SettlementFaction[s.Index] == world.Pop.SettlementFaction[plaza]))
+            s.Stock[0] = s.Index == plaza ? 0 : world.Pop.Residents[s.Index] * 1000L;   // the whole faction low, the plaza worst
         while (!world.State.Facts.Any(f => f.Kind == "shortage")) Steps(world, WorldAuthority.PopulationEvery);
         var listener = Summon(world, false, alice.X + 1.5, alice.Z, faction: world.Pop.SettlementFaction[plaza]);
         Steps(world, WorldAuthority.PopulationEvery * 3);

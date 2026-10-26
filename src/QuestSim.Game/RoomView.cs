@@ -283,7 +283,7 @@ public partial class RoomView : Node3D
         if (city is not null && state.Settlements is not null)
         {
             var own = state.Actors.FirstOrDefault(a => a.Id == ownId);
-            map.UpdateMap(state.Settlements, own is null ? Vector2.Zero : new Vector2((float)own.X, (float)own.Z));
+            map.UpdateMap(state.Settlements, state.Factions, own is null ? Vector2.Zero : new Vector2((float)own.X, (float)own.Z));
         }
         DrawCrowd(delta);
         DrawHits(delta);

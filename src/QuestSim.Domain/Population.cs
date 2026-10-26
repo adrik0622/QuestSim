@@ -341,6 +341,18 @@ public sealed class Population
             if ((Info[i] & (Zombie | Dead | Detailed | Travelling)) == 0 && (Info[i] & 0xFFFFFF) == settlement) yield return i;
     }
 
+    // Coarse deaths at home in a settlement (raids), chosen by hash order. Only between ticks. Returns how many died.
+    public int KillResidents(int settlement, int count, uint salt)
+    {
+        var victims = new List<(uint Hash, uint Agent)>();
+        for (uint i = 0; i < Count; i++)
+            if ((Info[i] & (Zombie | Dead | Detailed | Travelling)) == 0 && (Info[i] & 0xFFFFFF) == settlement)
+                victims.Add((Hash4((uint)Seed, salt, i, 33), i));
+        int killed = 0;
+        foreach (var (_, i) in victims.OrderBy(v => v.Hash).ThenBy(v => v.Agent).Take(count)) { Info[i] |= Dead; Residents[settlement]--; killed++; }
+        return killed;
+    }
+
     // A refugee: new home (and its faction), walking there along the road. Only between ticks.
     public void Relocate(uint i, int settlement)
     {

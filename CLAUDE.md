@@ -100,7 +100,7 @@ Core invariants (see ENGINE_RULES.md "World invariants"):
   hand-edit stock or prune receipts. A new item, cost or crate needs matching validation rules.
 - Fixed content positions matter to tests: Q01 movement suites walk Alice +X along z=0 and Bob ±Z along x=−4.
 - World time pauses with zero joined characters. Disconnected characters vanish but keep identity/inventory.
-- Versioning: save schema 5, wire `ProtocolVersion` 6, content ID `questsim:city-v1`. Unknown/incomplete
+- Versioning: save schema 5, wire `ProtocolVersion` 7, content ID `questsim:city-v1`. Unknown/incomplete
   saves fail closed. Changing IDs, saves or messages requires stating compatibility and backing up saves before
   migration (v1–v4 saves get a byte-exact `.v<n>-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3→v4→v5). Protocol changes require rebuilding server and all clients.
 - Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: Linux and native Windows 11 (whitetop, RX 5700; full `test_all.sh --all` minus Xvfb screens), loopback 2–8 players,

@@ -114,18 +114,26 @@ danger follows from the economy instead of being hand-placed. Fight rate unchang
 ### Depth: economy, factions, leaders (director 2026-10-26; DIRECTOR.md)
 Build order; each step is a CURRENT_TASK with its own acceptance gate and runs the soak.
 
-### F19 - Settlement economy and the soak run (step 1)
+### F19 - Settlement economy and the soak run (step 1) — done 2026-10-26
 Four goods (food, medicine, ammo, materials) per settlement: stock, production by profile
-(farm, workshop, clinic, mixed), consumption by living residents, spoilage cap, everyday
-sharing along roads within a faction. Shortages lower order; hunger sends residents away as
-refugees; shortages and recoveries become facts, shortages spread as rumors. Saved (save v5).
-Headless soak fast-forwards weeks and fails on degenerate history. A full-transparency
-debug map in the client (M).
+(farm, workshop, clinic, mixed) with ±30% daily luck, consumption by living residents, a
+spoilage cap (food 10 days, others 30: people live close to the edge), faction logistics
+(each hour settlements move 1/20 toward their faction's per-person level). Seeded hardships
+(blight, fever, lost store, failed salvage) cut one faction's output of one good for 4 days.
+Shortages lower order; hunger sends residents away as refugees; shortage, recovery and
+hardship news is per faction and good. Saved (save v5). Headless soak; M debug map.
+Soak-driven changes: road-by-road sharing was far too slow (clinic medicine spoiled while
+towns ran dry), so logistics is faction-wide; with no world surplus nobody could ever spare
+anything, so the world makes ~6% more food and ~12% more medicine than it needs.
 
-### F20 - Faction relations and daily decisions (step 2)
-A faction-to-faction relations grid; once per game day each faction scores its options from
-needs, strength and its leader's traits: trade, raid, hoard, seek a truce, recruit. Decisions
-are facts. Deterministic and integer.
+### F20 - Faction relations and daily decisions (step 2) — done 2026-10-26
+A relations grid (-100..100; drifts back a point a day); once per game day each human faction
+makes one move for its neediest settlement: a faction-scale barter with a friendly faction
+that can spare the good (12 h delay), a raid on an enemy neighbour (6 h; odds from residents,
+loot 30%/10%, casualties both sides), a truce after long hostility, or hold. Temperaments stand
+in for leader traits (Union cautious, Traders mercantile, Choir aggressive). Moves in flight are
+saved; trades, raids and truces are facts and rumors; rumor trust follows relations. "Hoard"
+and "recruit" were not needed yet.
 
 ### F21 - Caravans and raid parties as physical groups (step 3)
 A trade or raid is a group of travelling agents carrying ledgered goods along the roads.

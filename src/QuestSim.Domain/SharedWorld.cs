@@ -99,6 +99,8 @@ public sealed class WorldSave
     public Dictionary<int, int> Standing { get; set; } = new();   // faction -> attitude toward players, -100..100
     public List<SettlementState> Settlements { get; set; } = new();   // F19 economy (since v5); empty until the population first steps
     public long EconomyTicks { get; set; }                          // coarse ticks the economy has seen
+    public List<FactionState> FactionStates { get; set; } = new();  // F20 relations and last moves; empty until the first economy hour
+    public List<FactionAction> FactionActions { get; set; } = new(); // F20 moves on their way
     [JsonRequired] public List<SupplyState> Supplies { get; set; } = InitialSupplies.ToList();
     [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<BuildReceipt> BuildReceipts { get; set; } = new();
@@ -120,7 +122,7 @@ public sealed class WorldSave
 
 public sealed partial class WorldAuthority
 {
-    public const int ProtocolVersion = 6;   // 5: crowd velocities, NPC bodies; 6: settlement economy in world snapshots
+    public const int ProtocolVersion = 7;   // 5: crowd velocities, NPC bodies; 6: settlement economy; 7: faction relations and moves
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;
@@ -394,6 +396,13 @@ public static class WorldStorage
         if (w.Settlements is null || w.EconomyTicks < 0 || w.Settlements.Select((s, i) => s is not null && s.Index == i && s.Profile is >= 0 and < 4 &&
                 s.Stock is { Length: Economy.Goods } && s.Stock.All(v => v >= 0) && s.Order is >= 0 and <= 100 && s.HoursHungry >= 0).Any(ok => !ok))
             throw new InvalidDataException("Invalid settlement economy");
+        if (w.FactionStates is null || w.FactionActions is null ||
+            w.FactionStates.Count is not (0 or Politics.Count) || w.FactionStates.Select((f, i) => f is not null && f.Id == i && f.Relations is { Length: Politics.Count } &&
+                f.Relations.All(r => r is >= -100 and <= 100)).Any(ok => !ok) ||
+            w.FactionActions.Any(a => a is null || a.Kind is not ("trade" or "raid") || a.Amount < 0 || a.ReturnAmount < 0 ||
+                a.From is < 0 or >= Population.HumanFactions || a.To is < 0 or >= Population.HumanFactions || a.Good is < 0 or >= Economy.Goods ||
+                a.ReturnGood is < 0 or >= Economy.Goods || a.FromSettlement < 0 || a.FromSettlement >= w.Settlements.Count || a.ToSettlement < 0 || a.ToSettlement >= w.Settlements.Count))
+            throw new InvalidDataException("Invalid faction state");
         if (w.Blocks.Any(b => b is null || string.IsNullOrWhiteSpace(b.Id) || !double.IsFinite(b.X) || !double.IsFinite(b.Z) ||
             !double.IsFinite(b.Width) || !double.IsFinite(b.Depth) || !double.IsFinite(b.Height) ||
             b.Width <= 0 || b.Depth <= 0 || b.Height <= 0 || b.Width > 12 || b.Depth > 12 || b.Height > 6) ||

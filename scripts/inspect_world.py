@@ -65,6 +65,15 @@ def main():
             print(f"  settlement {x['Index']:<4} {profiles[x['Profile']]:<8} order {x['Order']:>3}  short of "
                   f"{', '.join(g for i, g in enumerate(goods) if x['Reported'] >> i & 1)}; hungry {x['HoursHungry']} h")
 
+    if w.get('FactionStates'):
+        print('\nFaction relations and last moves')
+        for f in w['FactionStates'][:3]:
+            others = ', '.join(f"{FACTIONS[o]} {f['Relations'][o]:+d}" for o in range(3) if o != f['Id'])
+            print(f"  {FACTIONS[f['Id']]:<18} {others}; last move: {f['LastMove'] or '-'}")
+        goods = ['food', 'medicine', 'ammo', 'materials']
+        for a in w.get('FactionActions', []):
+            print(f"  on the way: {a['Kind']} {FACTIONS[a['From']]} -> {FACTIONS[a['To']]} ({goods[a['Good']]}) due hour {a['DueHour']}")
+
     if w.get('Opportunities'):
         print('\nOpportunities')
         for o in w['Opportunities']:

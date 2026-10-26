@@ -17,13 +17,16 @@ var clock = Stopwatch.StartNew();
 var city = new CityGen(seed);
 var pop = new Population(city, agents);
 var states = Economy.Create(pop, city);
+var factions = Politics.Create();
+var actions = new List<FactionAction>();
+var moves = new Dictionary<string, int>();   // faction:kind -> count
+var factionEvents = new List<FactionEvent>();
 int n = states.Count;
 int[] FactionResidents() => Enumerable.Range(0, Population.HumanFactions).Select(f => Enumerable.Range(0, n).Where(s => pop.SettlementFaction[s] == f).Sum(s => pop.Residents[s])).ToArray();
 var startResidents = FactionResidents();
 var timeline = new List<object>();
 var eventCounts = new Dictionary<string, int>();
-var maxShortShare = new double[Economy.Goods];      // after day 3
-var everShort = new bool[Economy.Goods];
+var crisisHours = new int[Economy.Goods];      // after day 3: hours a good was short in every human faction at once
 int refugees = 0, minOrder = 100, maxOrder = 0;
 long hour = 0;
 var events = new List<EconomyEvent>();
@@ -36,23 +39,29 @@ for (int day = 1; day <= days; day++)
         var tally = new EconomyTally();
         events.Clear();
         Economy.Hour(pop, states, ++hour, events, tally);
+        factionEvents.Clear();
+        Politics.Hour(pop, states, factions, actions, hour, factionEvents);
+        foreach (var e in factionEvents)
+        {
+            string key = $"{Population.FactionNames[e.From]}:{e.Kind}{(e.Kind == "raid" ? (e.Success ? "-took" : "-repelled") : "")}";
+            moves[key] = moves.GetValueOrDefault(key) + 1;
+        }
         refugees += tally.Refugees;
         foreach (var e in events) eventCounts[$"{e.Kind}:{Economy.GoodNames[(int)e.Good]}"] = eventCounts.GetValueOrDefault($"{e.Kind}:{Economy.GoodNames[(int)e.Good]}") + 1;
         for (int g = 0; g < Economy.Goods; g++)
-        {
-            int inhabited = Enumerable.Range(0, n).Count(s => pop.Residents[s] > 0);
-            int shortNow = Enumerable.Range(0, n).Count(s => pop.Residents[s] > 0 && Economy.Days10(states[s], pop.Residents[s], (Good)g) < 10);
-            everShort[g] |= shortNow > 0;
-            if (day > 3) maxShortShare[g] = Math.Max(maxShortShare[g], (double)shortNow / Math.Max(1, inhabited));
-        }
+            if (day > 3 && Enumerable.Range(0, Population.HumanFactions).All(f => states.Any(s => pop.SettlementFaction[s.Index] == f && (s.Reported >> g & 1) != 0)))
+                crisisHours[g]++;
         minOrder = Math.Min(minOrder, states.Min(s => s.Order)); maxOrder = Math.Max(maxOrder, states.Max(s => s.Order));
     }
     var residents = FactionResidents();
     var record = new
     {
         day, residents, humans = pop.Residents.Sum(), refugees,
+        relations = new[] { factions[0].Relations[1], factions[1].Relations[0], factions[0].Relations[2], factions[2].Relations[0], factions[1].Relations[2], factions[2].Relations[1] },
+        lastMoves = factions.Take(Population.HumanFactions).Select(f => f.LastMove).ToArray(),
         shortFood = Enumerable.Range(0, n).Count(s => (states[s].Reported & 1) != 0),
         shortMedicine = Enumerable.Range(0, n).Count(s => (states[s].Reported & 2) != 0),
+        shortByFaction = Enumerable.Range(0, Population.HumanFactions).Select(f => Enumerable.Range(0, n).Count(s => states[s].Reported != 0 && pop.SettlementFaction[s] == f)).ToArray(),
         meanOrder = Math.Round(states.Average(s => s.Order), 1),
         unrest = states.Count(s => s.Order < Economy.UnrestOrder),
         daysOfStock = Enumerable.Range(0, Economy.Goods).Select(g => Math.Round(Enumerable.Range(0, n).Sum(s => states[s].Stock[g]) / Math.Max(1.0, pop.Residents.Sum() * (double)Need(g)), 1)).ToArray(),
@@ -60,25 +69,29 @@ for (int day = 1; day <= days; day++)
             Math.Max(1.0, Enumerable.Range(0, n).Where(s => pop.SettlementFaction[s] == f).Sum(s => pop.Residents[s]) * 1000.0), 1)).ToArray()
     };
     timeline.Add(record);
-    Console.WriteLine($"day {day,3}: humans {record.humans,7:N0} by faction {string.Join("/", residents)}, short food {record.shortFood,3} medicine {record.shortMedicine,3}, " +
-        $"order {record.meanOrder} (unrest {record.unrest}), stock days {string.Join("/", record.daysOfStock)}, faction food days {string.Join("/", record.factionFoodDays)}, refugees {refugees:N0}");
+    Console.WriteLine($"day {day,3}: humans {record.humans,7:N0} by faction {string.Join("/", residents)}, short food {record.shortFood,3} medicine {record.shortMedicine,3} (by faction {string.Join("/", record.shortByFaction)}), " +
+        $"order {record.meanOrder} (unrest {record.unrest}), stock days {string.Join("/", record.daysOfStock)}, faction food days {string.Join("/", record.factionFoodDays)}, refugees {refugees:N0}, " +
+        $"relations U-T {record.relations[0]}/{record.relations[1]} U-C {record.relations[2]}/{record.relations[3]} T-C {record.relations[4]}/{record.relations[5]}");
     if (day % mapEvery == 0 || day == days) Map(day);
 }
 
-File.WriteAllText(Path.Combine(output, "timeline.json"), JsonSerializer.Serialize(new { seed, agents, days, events = eventCounts, timeline }, new JsonSerializerOptions { WriteIndented = true }));
+File.WriteAllText(Path.Combine(output, "timeline.json"), JsonSerializer.Serialize(new { seed, agents, days, events = eventCounts, moves, timeline }, new JsonSerializerOptions { WriteIndented = true }));
 Console.WriteLine($"events: {string.Join(", ", eventCounts.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value}"))}");
+Console.WriteLine($"faction moves: {string.Join(", ", moves.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value}"))}");
 Console.WriteLine($"{days} game days ({hour} hours, {pop.Tick:N0} population ticks, {agents:N0} agents) in {clock.Elapsed.TotalSeconds:F0} s; output {output}");
 
 // Degenerate history checks.
 int failures = 0;
 void Check(bool ok, string text) { Console.WriteLine((ok ? "PASS " : "FAIL ") + text); if (!ok) failures++; }
 var endResidents = FactionResidents();
-foreach (var g in new[] { Good.Food, Good.Medicine })
-    Check(everShort[(int)g] && maxShortShare[(int)g] < .5,
-        $"{Economy.GoodNames[(int)g]} runs short somewhere but never in half the settlements after day 3 (peak {maxShortShare[(int)g]:P0})");
-// Recovery needs supplies from outside (trade and raids, F20-F21); until then shortages are the pressure that motivates them.
-Check(eventCounts.Keys.Any(k => k.StartsWith("shortage")),
-    $"settlements run short (shortage facts; {eventCounts.Where(e => e.Key.StartsWith("recovered")).Sum(e => e.Value)} recoveries without trade)");
+Check(crisisHours.All(h => h < 24), $"no good is short in every faction for a day or more (worldwide crisis hours: {string.Join("/", crisisHours)})");
+Check(eventCounts.Keys.Any(k => k.StartsWith("shortage")) && eventCounts.Keys.Any(k => k.StartsWith("recovered")),
+    $"factions run short and recover ({eventCounts.Where(e => e.Key.StartsWith("shortage")).Sum(e => e.Value)} shortages, {eventCounts.Where(e => e.Key.StartsWith("recovered")).Sum(e => e.Value)} recoveries)");
+for (int f = 0; f < Population.HumanFactions; f++)
+    Check(moves.Keys.Any(k => k.StartsWith(Population.FactionNames[f] + ":")), $"{Population.FactionNames[f]} makes moves ({string.Join(", ", moves.Where(m => m.Key.StartsWith(Population.FactionNames[f] + ":")).Select(m => $"{m.Key.Split(':')[1]} {m.Value}"))})");
+Check(moves.Keys.Any(k => k.EndsWith(":trade")), "factions trade");
+Check(Enumerable.Range(0, Population.HumanFactions).Any(a => Enumerable.Range(0, Population.HumanFactions).Any(b => a != b && factions[a].Relations[b] > -100)),
+    $"relations are not pinned at -100 everywhere (end: {string.Join(" ", factions.Take(3).Select(f => string.Join("/", f.Relations.Take(3))))})");
 for (int f = 0; f < Population.HumanFactions; f++)
     Check(endResidents[f] * 2 > startResidents[f], $"{Population.FactionNames[f]} keeps more than half its people ({startResidents[f]:N0} -> {endResidents[f]:N0})");
 Check(minOrder >= 0 && maxOrder <= 100 && states.All(s => s.Stock.All(v => v >= 0)), $"order stays within 0-100 ({minOrder}-{maxOrder}) and no stock goes negative");

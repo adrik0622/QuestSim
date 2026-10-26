@@ -1,7 +1,7 @@
 namespace QuestSim.Domain;
 
 public sealed record AskResult(string Speaker, string[] Lines, string Reason);
-public sealed record FactionInfo(int Id, string Name, int Standing, long Members);
+public sealed record FactionInfo(int Id, string Name, int Standing, long Members, int[]? Relations = null, string LastMove = "");
 
 // Facts worth talking about become rumors in the population (E1 spread model); NPCs answer from their own beliefs.
 // Faction standing toward the players is the first consequence loop: kill a faction's people and it turns hostile.
@@ -10,7 +10,7 @@ public sealed partial class WorldAuthority
     public const long RumorLifetime = 3600;          // population ticks (2 game days at 48:1)
     public const double WitnessRadius = 150, AskReach = 3;
     public const int HostileBelow = -50;
-    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack", "shortage"];
+    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack", "shortage", "hardship", "trade", "raid", "truce"];
     public const int AttackFactThreshold = 10;
 
     // Background attrition becomes news when a settlement loses enough people in one coarse tick.
@@ -80,7 +80,7 @@ public sealed partial class WorldAuthority
         var trust = new uint[64];
         for (int a = 0; a < Population.HumanFactions; a++)
             for (int b = 0; b < Population.HumanFactions; b++)
-                trust[a * 8 + b] = a == b ? 0xC000u : a == Population.Hostile || b == Population.Hostile ? 0x1800u : 0x8000u;
+                trust[a * 8 + b] = a == b ? 0xC000u : (uint)(0x1800 + (Relation(a, b) + 100) * (0xC000 - 0x1800) / 200);   // allies are believed more
         return new Population.RumorInput(credibility, trust, lo, hi, (uint)(0.02 * uint.MaxValue));
     }
 
@@ -98,7 +98,8 @@ public sealed partial class WorldAuthority
     public bool IsHostile(Npc npc) => npc.Zombie || Standing(npc.Faction) <= HostileBelow;
 
     public IEnumerable<FactionInfo> Factions() => Enumerable.Range(0, Population.FactionNames.Length)
-        .Select(f => new FactionInfo(f, Population.FactionNames[f], f < Population.HumanFactions ? Standing(f) : -100, Pop?.Members[f] ?? 0));
+        .Select(f => new FactionInfo(f, Population.FactionNames[f], f < Population.HumanFactions ? Standing(f) : -100, Pop?.Members[f] ?? 0,
+            Enumerable.Range(0, Politics.Count).Select(o => Relation(f, o)).ToArray(), State.FactionStates.ElementAtOrDefault(f)?.LastMove ?? ""));
 
     // H: the nearest human NPC in reach tells you what it has actually heard.
     public AskResult Ask(int peer)
@@ -125,6 +126,11 @@ public sealed partial class WorldAuthority
         return "someone";
     }
 
+    // "the Survivors' Union", "the Hollow Choir": names with or without their own article, capitalised at a sentence start.
+    static string The(string name, bool start = false) => (start ? "The " : "the ") + (name.StartsWith("The ") ? name[4..] : name);
+    static string FactionOf(string id, bool start = false) => The(Population.FactionNames[int.Parse(id.Split(':')[1])], start);
+    string SettlementFaction(string id, bool start = false) => The(Population.FactionNames[Pop?.SettlementFaction[int.Parse(id.Split(':')[1])] ?? 0], start);
+
     static string Place(double x, double z)
     {
         double d = Math.Sqrt(x * x + z * z);
@@ -141,8 +147,20 @@ public sealed partial class WorldAuthority
         "turned" => $"{NameOf(f.Subject)} turned; the infection took them {Place(f.X, f.Z)}.",
         "died" => $"{NameOf(f.Subject)} died {Place(f.X, f.Z)}.",
         "attack" => $"The dead overran the settlement {Place(f.X, f.Z)}; {f.Object.Split(':')[2]} people were lost.",
-        "shortage" => f.Object == "food" ? $"People are going hungry {Place(f.X, f.Z)}; the food ran out." : $"They've run out of {f.Object} {Place(f.X, f.Z)}.",
+        "shortage" => f.Object == "food" ? $"Food is running short among {SettlementFaction(f.Subject)}; people are going hungry {Place(f.X, f.Z)}."
+            : $"{SettlementFaction(f.Subject, true)} are running out of {f.Object}; it's worst {Place(f.X, f.Z)}.",
+        "hardship" => f.Object switch
+        {
+            "food" => $"Blight has hit the fields of {SettlementFaction(f.Subject)}.",
+            "medicine" => $"Fever is going round {SettlementFaction(f.Subject)}; their medicine won't last.",
+            "ammo" => $"{SettlementFaction(f.Subject, true)} lost an ammunition store.",
+            _ => $"{SettlementFaction(f.Subject, true)}'s salvage crews keep coming back empty-handed."
+        },
         "recovered" => $"Supplies of {f.Object} reached the settlement {Place(f.X, f.Z)} again.",
+        "trade" => $"{FactionOf(f.Subject, true)} traded with {FactionOf(f.Object)} {Place(f.X, f.Z)}; {f.Object.Split(':')[2]} changed hands.",
+        "raid" when f.Object.Split(':')[2] == "took" => $"{FactionOf(f.Subject, true)} raided the settlement {Place(f.X, f.Z)} and carried off {f.Object.Split(':')[3]}.",
+        "raid" => $"{FactionOf(f.Subject, true)} attacked the settlement {Place(f.X, f.Z)} but were driven off.",
+        "truce" => $"{FactionOf(f.Subject, true)} and {FactionOf(f.Object)} agreed a truce.",
         "claimed" => $"{NameOf(f.Subject)} brought down {NameOf(State.Opportunities.First(o => $"opportunity:{o.Id}" == f.Object).Target)}.",
         _ => $"Something happened {Place(f.X, f.Z)}."
     };

@@ -1,52 +1,55 @@
-# Current task: F19 / settlement economy and the soak run
+# Current task: F20 / faction relations and daily decisions
 
-Status: implemented 2026-10-26 (STATE.md has the evidence). Director: "let's move forward";
-decisions in DIRECTOR.md "Depth". Change from the plan: "at least one settlement recovers" moved
-to F20/F21 (nothing resupplies a settlement until trade or raids exist); the recovery path itself
-is a domain check. Previous task E1 is complete (E1_RESULTS.md). Experimental: measurements and
-playtests decide what is kept.
+Status: implemented 2026-10-26 (STATE.md has the evidence). Director: "go ahead and carry on"
+after the depth plan. Changes from the plan, from the soak: thresholds scaled to 3-6 day stocks
+(act under 3 days, raid in desperation under 1.5, a partner spares from 4 days); trades are
+faction-scale (drawn from all settlements, delivered at the border); trade goodwill +2. Experimental: measurements and playtests decide what is kept.
 
 ## Question
 
-Can 229 settlements with four goods produce, consume, share and run short in a way that gives
-factions real reasons to trade or fight, stays stable over weeks of history, and shows up for
-players (debug map now, rumors always)?
+Given the F19 economy, do factions make one sensible, visible move per game day (trade, raid,
+truce or hold) that moves goods, changes relations, and lets short settlements recover, without
+the history turning degenerate (endless war, one faction eating the rest, or nothing happening)?
 
 ## Scope
 
-1. **Goods and profiles.** Food, medicine, ammo, materials. Each settlement gets a seeded
-   profile (towns and about a quarter of districts farm; some workshops, a few clinics; the
-   rest mixed) that sets production per resident per game day. Units are person-days; all
-   integer arithmetic.
-2. **State (CPU-owned, saved).** Stock per good, order 0-100, hours short of food. Residents
-   are living humans whose home is the settlement (counted in the population step). Save
-   schema 5; v4 saves migrate (byte-exact backup) and get the generated starting economy.
-3. **Hourly step (game hour = 75 population ticks at 48:1).** Production minus consumption;
-   stock capped at 30 days (surplus spoils); same-faction neighbours along roads share part
-   of the difference in days-of-food; the Choir shares only with the Choir. Order falls while
-   food or medicine is short and recovers otherwise. Hungry, disorderly settlements send a
-   share of residents to the neighbour with the most food per person (refugees travel there).
-4. **Facts.** "shortage" when a settlement runs out of food or medicine (a rumor), "recovered"
-   when it is supplied again (fact only). Hysteresis so a settlement on the edge does not spam.
-5. **Prices.** Price of a good per settlement from days of stock (shown on the map; used by F23).
-6. **Soak run.** Headless console tool: a population plus economy fast-forwarded N game days
-   from a seed; a timeline (JSON) and map images; fails on degenerate history.
-7. **Debug map (M in the client).** Settlements by faction and size, roads, shortages, order
-   and stock; the player's position. Full transparency, provisional.
+1. **Relations.** A grid between the five factions, -100..100 (zombie hordes fixed at -100).
+   Starting values: Union and Traders +20, the Choir -60 with everyone. Relations drift 1 point
+   per day back toward the start. Saved (save v5 fields, additive; worlds saved before F20 get them
+   on the first economy hour).
+2. **Temperaments** (until F22 leaders bring traits): Union cautious, Traders mercantile, Choir
+   aggressive. They weight the scores.
+3. **Daily decision** per human faction at its own hour (06:00, 10:00, 14:00): from faction-wide
+   days of stock per good, score:
+   - **Trade** with a faction at relation >= -10: barter a good we have plenty of (12+ days) for
+     one we lack (under 6 days) that they have plenty of and need less; equal value at base
+     prices; at most 2 days of the receiver's need. Between adjacent border settlements.
+   - **Raid** a neighbour at relation <= -20 (the Choir raids anyone) when a good is under 3
+     days: the raiding settlement attacks an adjacent enemy settlement with the most of it.
+     Success odds from residents on each side; loot 30% of that good (10% of others); a few
+     residents die on both sides (more on the losing side); relations fall; order falls at
+     the target.
+   - **Truce** when at relation <= -40 with a non-Choir faction: both rise by 20.
+   - **Hold** when nothing scores.
+4. **Delays.** A decision is a pending action saved in the world; trades arrive after 12 game
+   hours, raids strike after 6. (F21 turns pending actions into travelling groups players can
+   meet.)
+5. **Facts and rumors.** trade, raid (success or repelled) and truce become facts and rumors,
+   so NPCs talk about them.
+6. **Rumor trust follows relations** (factions believe allies more than enemies).
+7. **Soak.** Faction moves run in the soak too; the debug map shows relations and the last move.
 
 ## Acceptance
 
-- Same seed, same economy every run; save after N hours and reload equals running straight.
-- Goods are conserved apart from production, consumption, spoilage (all counted per hour).
-- Soak (30 game days, 100k agents): no good is short everywhere or nowhere; at least one
-  settlement runs short and at least one recovers; the share of short settlements stays below
-  half after day 3; no faction loses more than half its residents to migration; order stays
-  in 0-100.
-- Facts and rumors appear for shortages; a player can hear about one by asking an NPC.
-- v4 saves migrate with a byte-exact backup; protocol bumped for the map data.
+- Same seed, same decisions; save/reload mid-run continues identically (domain check).
+- Goods conserved: trades move goods, raids move loot; nothing created.
+- Soak (30 days, 100k agents): every human faction makes moves; trades happen; at least one
+  settlement recovers from a shortage; raids happen but relations are not pinned at -100 for
+  all pairs; no faction loses more than half its people; shortage share stays under half.
+- A raid or trade becomes a rumor an NPC repeats.
 - test_all green on Linux and Windows.
 
 ## Not in this task
 
-Faction decisions, caravans, raids, leaders, player trading (F20-F23); per-person economies
-(Horizon).
+Travelling caravans and raid parties players can meet (F21), leaders and succession (F22),
+order-driven danger zones (F18), player trading (F23).

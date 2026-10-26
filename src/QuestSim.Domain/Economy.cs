@@ -25,21 +25,32 @@ public sealed class EconomyTally
 }
 
 // F19: four goods per settlement, made by residents according to the settlement's profile, eaten by residents,
-// shared along roads within a faction. Shortages lower order and, after a hungry day, send people away. Runs once per
+// moved within each faction by its logistics. Shortages lower order and, after a hungry day, send people away. Runs once per
 // game hour between population ticks; integer-only and in index order, so a seed always produces the same history.
 public static class Economy
 {
     public const int Goods = 4, TicksPerHour = 3600 / Population.GameSecondsPerTick, CalmOrder = 70, MaxOrder = 90;
-    public const int ShareDivisor = 20, RecoveredDays = 3, UnrestOrder = 40;
+    public const int ShareDivisor = 20, ShortDays = 2, RecoveredDays = 3, UnrestOrder = 40;
+    public const int HardshipDays = 4, HardshipChance = 30, HardshipOutput = 10;   // per faction per 4-day window: 30% chance, output 10%
+
+    // Seeded, so nothing is saved: in each 4-day window a faction may suffer one hardship (blight, fever, a lost store,
+    // failed salvage) cutting its output of one good. Returns the good, or -1.
+    public static int Hardship(ulong seed, int faction, long day)
+    {
+        uint h = Population.Hash4((uint)seed, 64, (uint)faction, (uint)(day / HardshipDays));
+        return h % 100 < HardshipChance ? (int)(h / 100 % Goods) : -1;
+    }
     public static readonly string[] GoodNames = ["food", "medicine", "ammo", "materials"];
     public static readonly string[] ProfileNames = ["farm", "workshop", "clinic", "mixed"];
     public const int Farm = 0, Workshop = 1, Clinic = 2, Mixed = 3;
-    // Per resident per game day, in milli person-days. Farms feed themselves and about one more person; overall output
-    // roughly matches need, so shortages come from geography and politics, not from a starving world.
-    static readonly int[] Need = [1000, 20, 10, 50];
-    static readonly int[][] Make = [[2200, 5, 3, 30], [500, 5, 50, 250], [500, 150, 3, 30], [650, 10, 8, 50]];
-    static readonly int[] StoreDays = [30, 60, 60, 60];   // beyond this much surplus spoils or is lost
-    static readonly int[] BasePrice = [2, 25, 5, 3];
+    // Per resident per game day, in milli person-days. Farms feed themselves and more; overall the world makes a modest
+    // surplus (food ~6%, medicine ~12%, unevenly by faction). Output varies ±30% per settlement per day (weather, luck),
+    // and hardships (below) knock a faction's output of one good down for days, so shortages come and go and give
+    // factions reasons to trade or fight. (Measured in the soak: with no surplus nobody can ever spare anything.)
+    internal static readonly int[] Need = [1000, 20, 10, 50];
+    static readonly int[][] Make = [[2350, 5, 3, 30], [500, 5, 50, 250], [500, 160, 3, 30], [650, 10, 8, 50]];
+    static readonly int[] StoreDays = [10, 30, 30, 30];   // beyond this much surplus spoils or is lost: people live close to the edge
+    internal static readonly int[] BasePrice = [2, 25, 5, 3];
 
     // Districts outside the urban core (the towns and countryside) farm; urban districts get a seeded trade.
     public static int ProfileOf(CityGen city, Settlement s)
@@ -54,7 +65,7 @@ public static class Economy
         var state = new SettlementState { Index = s.Index, Profile = ProfileOf(city, s) };
         long residents = pop.Residents[s.Index];
         for (int g = 0; g < Goods; g++)
-            state.Stock[g] = residents * Need[g] * (5 + Population.Hash4((uint)city.Seed, 62, (uint)s.Index, (uint)g) % 6);   // 5-10 days
+            state.Stock[g] = residents * Need[g] * (3 + Population.Hash4((uint)city.Seed, 62, (uint)s.Index, (uint)g) % 4);   // 3-6 days
         return state;
     }).ToList();
 
@@ -78,9 +89,11 @@ public static class Economy
         {
             var state = states[s];
             long residents = pop.Residents[s];
+            long luck = 70 + Population.Hash4((uint)pop.Seed, 63, (uint)s, (uint)(hour / 24)) % 61;   // 70-130% today
+            int faction = pop.SettlementFaction[s], hardship = faction < Population.HumanFactions ? Hardship(pop.Seed, faction, hour / 24) : -1;
             for (int g = 0; g < Goods; g++)
             {
-                long made = residents * Make[state.Profile][g] / 24, need = residents * Need[g] / 24;
+                long made = residents * Make[state.Profile][g] * luck * (g == hardship ? HardshipOutput : 100) / 240000, need = residents * Need[g] / 24;
                 state.Stock[g] += made; tally.Produced[g] += made;
                 long eaten = Math.Min(state.Stock[g], need);
                 state.Stock[g] -= eaten; tally.Consumed[g] += eaten;
@@ -89,24 +102,45 @@ public static class Economy
                 if (state.Stock[g] > cap) { tally.Spoiled[g] += state.Stock[g] - cap; state.Stock[g] = cap; }
             }
         }
-        // 2. Everyday sharing along roads within a faction: each link closes 1/20 of the per-person gap, computed from the
-        //    stock before any sharing this hour, so the result does not depend on link order.
-        var delta = new long[n, Goods];
-        for (int a = 0; a < n; a++)
-            foreach (int b in pop.Neighbours(a))
+        // 2. Faction logistics: within each faction, settlements above the faction's per-person level give 1/20 of their
+        //    surplus each hour into a pool that is split among those below it by their shortfall. (Passing goods along
+        //    roads hop by hop was far too slow across the city: clinics' medicine spoiled while distant towns ran dry.)
+        for (int faction = 0; faction < Population.HumanFactions; faction++)
+        {
+            var members = Enumerable.Range(0, n).Where(x => pop.SettlementFaction[x] == faction && pop.Residents[x] > 0).ToArray();
+            long people = members.Sum(x => (long)pop.Residents[x]);
+            if (members.Length < 2 || people == 0) continue;
+            for (int g = 0; g < Goods; g++)
             {
-                if (b <= a || !Allied(pop, a, b)) continue;
-                long ra = pop.Residents[a], rb = pop.Residents[b];
-                if (ra + rb == 0) continue;
-                for (int g = 0; g < Goods; g++)
+                long total = members.Sum(x => states[x].Stock[g]), pool = 0;
+                var shortfall = new long[members.Length];
+                for (int k = 0; k < members.Length; k++)
                 {
-                    long move = (states[a].Stock[g] * rb - states[b].Stock[g] * ra) / (ra + rb) / ShareDivisor;   // + means a gives to b
-                    delta[a, g] -= move; delta[b, g] += move;
+                    long fair = total * pop.Residents[members[k]] / people, have = states[members[k]].Stock[g];
+                    if (have > fair) { long give = (have - fair) / ShareDivisor; states[members[k]].Stock[g] -= give; pool += give; }
+                    else shortfall[k] = fair - have;
                 }
+                long wanted = shortfall.Sum();
+                if (pool == 0 || wanted == 0) { if (pool > 0) states[members[0]].Stock[g] += pool; continue; }
+                long handed = 0;
+                int neediest = 0;
+                for (int k = 0; k < members.Length; k++)
+                {
+                    long share = (long)((Int128)pool * shortfall[k] / wanted);
+                    states[members[k]].Stock[g] += share; handed += share;
+                    if (shortfall[k] > shortfall[neediest]) neediest = k;
+                }
+                states[members[neediest]].Stock[g] += pool - handed;   // rounding remainder, so nothing is created or lost
             }
-        for (int s = 0; s < n; s++)
-            for (int g = 0; g < Goods; g++) states[s].Stock[g] += delta[s, g];
+        }
+        if (hour % (24 * HardshipDays) == 0)   // a new window: news of any hardship, from the faction's largest settlement
+            for (int f = 0; f < Population.HumanFactions; f++)
+                if (Hardship(pop.Seed, f, hour / 24) is int bad and >= 0)
+                    events.Add(new("hardship", Enumerable.Range(0, n).Where(x => pop.SettlementFaction[x] == f).OrderByDescending(x => pop.Residents[x]).ThenBy(x => x).First(), (Good)bad));
         // 3. Order, hunger and news. Order falls while people go without food or medicine and recovers slowly otherwise.
+        //    Each settlement marks its own shortages (the map shows them); news is per faction and good (with logistics
+        //    a faction runs short together): when its first settlement runs short and when its last one recovers.
+        int[,] reportedBefore = ReportedCounts(pop, states);
         for (int s = 0; s < n; s++)
         {
             var state = states[s];
@@ -123,10 +157,21 @@ public static class Economy
             foreach (var good in new[] { Good.Food, Good.Medicine })
             {
                 int bit = 1 << (int)good;
-                if (unmet[s, (int)good] > 0 && (state.Reported & bit) == 0) { state.Reported |= bit; events.Add(new("shortage", s, good)); }
-                else if ((state.Reported & bit) != 0 && Days10(state, residents, good) >= RecoveredDays * 10) { state.Reported &= ~bit; events.Add(new("recovered", s, good)); }
+                if ((unmet[s, (int)good] > 0 || Days10(state, residents, good) < ShortDays * 10) && (state.Reported & bit) == 0) state.Reported |= bit;
+                else if ((state.Reported & bit) != 0 && Days10(state, residents, good) >= RecoveredDays * 10) state.Reported &= ~bit;
             }
         }
+        int[,] reportedAfter = ReportedCounts(pop, states);
+        for (int f = 0; f < Population.HumanFactions; f++)
+            foreach (var good in new[] { Good.Food, Good.Medicine })
+            {
+                bool started = reportedBefore[f, (int)good] == 0 && reportedAfter[f, (int)good] > 0, ended = reportedBefore[f, (int)good] > 0 && reportedAfter[f, (int)good] == 0;
+                if (!started && !ended) continue;
+                // Located at the hardest-hit (or, on recovery, the largest) settlement of the faction.
+                int at = Enumerable.Range(0, n).Where(x => pop.SettlementFaction[x] == f && pop.Residents[x] > 0)
+                    .OrderBy(x => started ? Days10(states[x], pop.Residents[x], good) : -pop.Residents[x]).ThenBy(x => x).DefaultIfEmpty(0).First();
+                events.Add(new(started ? "shortage" : "recovered", at, good));
+            }
         // 4. After a hungry day in unrest, 1% of the people at home (at least one) leave each hour for the neighbour with the most
         //    food per person (and join its faction); the Hollow Choir only takes in its own.
         var destination = Enumerable.Repeat(-1, n).ToArray();
@@ -158,6 +203,15 @@ public static class Economy
             }
     }
 
+    static int[,] ReportedCounts(Population pop, List<SettlementState> states)
+    {
+        var counts = new int[Population.HumanFactions, Goods];
+        foreach (var s in states)
+            for (int g = 0; g < Goods; g++)
+                if ((s.Reported >> g & 1) != 0 && pop.SettlementFaction[s.Index] < Population.HumanFactions) counts[pop.SettlementFaction[s.Index], g]++;
+        return counts;
+    }
+
     public static SettlementInfo Info(Population pop, SettlementState s)
     {
         int residents = pop.Residents[s.Index];
@@ -180,13 +234,15 @@ public sealed partial class WorldAuthority
         if (++State.EconomyTicks % Economy.TicksPerHour != 0) return;
         var events = new List<EconomyEvent>();
         var tally = new EconomyTally();
-        Economy.Hour(pop, State.Settlements, State.EconomyTicks / Economy.TicksPerHour, events, tally);
+        long hour = State.EconomyTicks / Economy.TicksPerHour;
+        Economy.Hour(pop, State.Settlements, hour, events, tally);
         LastEconomyHour = tally;
         foreach (var e in events)
         {
             var s = pop.Settlements[e.Settlement];
             AddFact(e.Kind, $"settlement:{e.Settlement}", Economy.GoodNames[(int)e.Good], s.X, s.Z);
         }
+        StepFactions(hour);
     }
 
     public IEnumerable<SettlementInfo> SettlementInfos() =>

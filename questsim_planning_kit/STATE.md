@@ -87,5 +87,15 @@ mean order 81. Finding for the director: humans decline from day ~11 (67k -> 59k
 reused; over months a world would empty. Options: births or arrivals that reuse long-dead slots
 under a new generation number (IDs like npc:N.g), or a larger reserve.
 
-Next action: F20 faction relations and daily decisions (CURRENT_TASK to be written), unless
-the director wants a playtest of F19 first; decide the population-decline option above.
+2026-10-26 (F20 faction relations and daily decisions): implemented (CURRENT_TASK.md, BACKLOG
+F19/F20 record the soak-driven changes: faction logistics, 3-6 day buffers, seeded hardships,
+a modest world surplus, faction-scale trades). A 30-day soak now tells a coherent story: a food
+blight hits the Traders around day 17, 94 of their settlements fall into unrest, they barter with
+the Union and raid the Choir, and recover by day 30; the Union retaliates against the Choir; the
+Choir stays a medicine-starved raiding cult (~30 raids a month); Union-Traders relations hold
+near +20. Rumors such as "The Hollow Choir attacked the settlement at the plaza but were driven
+off." 150 domain checks. The debug map shows relations and each faction's last move.
+
+Next action: director playtest of F19/F20 (M map, rumors, faction news) or go on to F21
+(caravans and raid parties as travelling groups players can meet); decide the
+population-decline option above.
