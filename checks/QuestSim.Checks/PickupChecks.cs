@@ -9,12 +9,12 @@ public static class PickupChecks
         var a = world.Join(2, new string('a', 32), "Alice");
         var b = world.Join(3, new string('b', 32), "Bob");
         string item = world.State.Supply.ItemId, target = world.State.Supply.Id;
-        string firstId = Guid.NewGuid().ToString("N"), secondId = Guid.NewGuid().ToString("N");
+        string firstId = Guid.NewGuid().ToString("N"), secondId = firstId; // Same ID across different actors must stay isolated.
         var first = world.TakeItem(2, firstId, target);
         var second = world.TakeItem(3, secondId, target);
         check(first.Success && !second.Success && second.Reason == "empty" &&
             a.Inventory.GetValueOrDefault(item) + b.Inventory.GetValueOrDefault(item) + world.State.Supply.Count == 1,
-            "last-item race transfers exactly one bandage and conserves resources");
+            "last-item race with the same request ID on different actors conserves one bandage");
         check(world.TakeItem(2, firstId.ToUpperInvariant(), target) == first && world.TakeItem(3, secondId, target) == second && world.State.Receipts.Count == 2,
             "winner and loser retries, including GUID case variants, replay original receipts");
         bool conflict = false;
@@ -64,6 +64,14 @@ public static class PickupChecks
             check(WorldStorage.Load(path).Supply.Count == 0 && Directory.GetFiles(dir, "*.bak").Length == 1,
                 "v2 reload does not repeat migration, create another backup or restock the crate");
             var corrupt = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            var owner = corrupt["Characters"]!.AsArray().Single(c => c!["Id"]!.GetValue<string>() == a.Id)!;
+            var held = owner["Inventory"]![item]!.DeepClone();
+            owner["Inventory"]!.AsObject().Remove(item);
+            File.WriteAllText(path, corrupt.ToJsonString());
+            bool lostItem = false;
+            try { WorldStorage.Load(path); } catch (InvalidDataException) { lostItem = true; }
+            check(lostItem, "successful receipt without the awarded item rejected as inconsistent");
+            owner["Inventory"]![item] = held;
             corrupt["Supply"]!["Count"] = 1;
             File.WriteAllText(path, corrupt.ToJsonString());
             bool inconsistent = false;

@@ -14,17 +14,21 @@ public partial class Session : Node
     private CharacterRecord? own;
     private string profileId = "", profileName = "", savePath = "", statusPath = "", intentPath = "", shutdownPath = "";
     private string connection = "Connecting";
-    private bool server, connected, serverStarted;
+    private bool server, connected, serverStarted, failed;
     private volatile bool shutdownRequested;
     private FileStream? saveLock;
     private int frame;
     private double saveElapsed, statusElapsed, desiredX, desiredZ, desiredHeading = -Math.PI / 2;
     private long sequence, commandSerial;
     private long? testSequence;
+    private Profile profile = null!;
+    private string profilePath = "";
+    private PickupReceipt? lastPickup;
+    private string itemMessage = "F takes a bandage from the green crate; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
     private string PathOption(string key, string fallback = "") => Option(key, fallback) is var value && value.Length > 0 ? Path.GetFullPath(value, Workspace) : "";
-    private sealed record Profile(string Id, string Name);
+    private sealed record Profile(string Id, string Name, string LastPickupRequestId = "", string LastPickupContainerId = "");
     private sealed class TestIntent
     {
         public long Serial { get; set; }
@@ -33,6 +37,9 @@ public partial class Session : Node
         public double Heading { get; set; } = -Math.PI / 2;
         public long? Sequence { get; set; }
         public bool Quit { get; set; }
+        public string PickupRequestId { get; set; } = "";
+        public string ContainerId { get; set; } = "";
+        public bool RetryPickup { get; set; }
     }
 
     public override void _Ready()
@@ -70,8 +77,7 @@ public partial class Session : Node
             {
                 profileName = Option("profile", "player");
                 if (!Regex.IsMatch(profileName, "^[a-zA-Z0-9_-]{1,24}$")) throw new ArgumentException("Profile must be 1–24 letters, digits, _ or -");
-                string profilePath = Path.Combine(PathOption("profiles-dir", ".artifacts/play/profiles"), profileName + ".json");
-                Profile profile;
+                profilePath = Path.Combine(PathOption("profiles-dir", ".artifacts/play/profiles"), profileName + ".json");
                 if (File.Exists(profilePath)) profile = JsonSerializer.Deserialize<Profile>(File.ReadAllText(profilePath), WorldStorage.JsonOptions) ?? throw new InvalidDataException("Empty profile");
                 else
                 {
@@ -81,7 +87,9 @@ public partial class Session : Node
                     JsonSerializer.Serialize(profileFile, profile);
                     profileFile.Flush(flushToDisk: true);
                 }
-                if (!Guid.TryParseExact(profile.Id, "N", out _)) throw new InvalidDataException("Invalid local profile identity");
+                if (!Guid.TryParseExact(profile.Id, "N", out _) || profile.LastPickupRequestId is null ||
+                    (profile.LastPickupRequestId.Length > 0 && (!Guid.TryParseExact(profile.LastPickupRequestId, "N", out _) ||
+                    string.IsNullOrWhiteSpace(profile.LastPickupContainerId) || profile.LastPickupContainerId.Length > 128))) throw new InvalidDataException("Invalid local profile identity");
                 profileId = profile.Id;
                 intentPath = PathOption("intent-file"); // Explicit opt-in for headless acceptance, never server state injection.
                 Multiplayer.ConnectedToServer += OnConnected;
@@ -93,6 +101,7 @@ public partial class Session : Node
                     DisplayServer.WindowSetTitle("QuestSim Shared Room");
                     view = new RoomView();
                     AddChild(view);
+                    view.PickupRequested += retry => RequestPickup(retry);
                 }
             }
             if (error != Error.Ok) throw new InvalidOperationException($"ENet startup failed: {error}");
@@ -100,7 +109,7 @@ public partial class Session : Node
             WriteStatus();
             serverStarted = server;
             if (server) Console.CancelKeyPress += OnCancelKeyPress;
-            GD.Print($"SESSION_READY role={(server ? "server" : "client")} profile={profileName} display={DisplayServer.GetName()} protocol=1 port={port}");
+            GD.Print($"SESSION_READY role={(server ? "server" : "client")} profile={profileName} display={DisplayServer.GetName()} protocol={WorldAuthority.ProtocolVersion} port={port}");
         }
         catch (Exception e) { Fail(e); }
     }
@@ -121,7 +130,7 @@ public partial class Session : Node
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void RequestJoin(int version, string profile, string name)
     {
-        if (!server || authority is null) return;
+        if (!server || authority is null || failed) return;
         int peer = Multiplayer.GetRemoteSenderId();
         try
         {
@@ -160,7 +169,7 @@ public partial class Session : Node
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = 1)]
     public void MoveIntent(long inputSequence, double x, double z, double heading)
     {
-        if (!server || authority is null) return;
+        if (!server || authority is null || failed) return;
         if (!authority.SetIntent(Multiplayer.GetRemoteSenderId(), inputSequence, x, z, heading))
             GD.Print("INTENT_REJECTED peer=", Multiplayer.GetRemoteSenderId());
     }
@@ -175,6 +184,77 @@ public partial class Session : Node
         snapshot = received;
     }
 
+    private void RequestPickup(bool retry, string requestId = "", string containerId = "")
+    {
+        if (!connected || own is null || snapshot is null) return;
+        if (retry)
+        {
+            requestId = profile.LastPickupRequestId;
+            containerId = profile.LastPickupContainerId;
+            if (requestId.Length == 0) { itemMessage = "No pickup to retry yet."; return; }
+        }
+        else
+        {
+            if (requestId.Length == 0) requestId = Guid.NewGuid().ToString("N");
+            if (!Guid.TryParseExact(requestId, "N", out var id)) { itemMessage = "Invalid pickup request."; return; }
+            requestId = id.ToString("N");
+            if (containerId.Length == 0) containerId = snapshot.Supply.Id;
+            if (containerId.Length > 128) { itemMessage = "Invalid crate."; return; }
+            var pending = profile with { LastPickupRequestId = requestId, LastPickupContainerId = containerId };
+            try { WorldStorage.WriteAtomic(profilePath, JsonSerializer.Serialize(pending)); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                itemMessage = "Could not save pickup request; no item taken.";
+                GD.Print("LOCAL_REQUEST_SAVE_FAILED ", e.Message);
+                return;
+            }
+            profile = pending;
+        }
+        itemMessage = retry ? "Retrying pickup..." : "Trying to take bandage...";
+        RpcId(1, nameof(TakeItem), requestId, containerId);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void TakeItem(string requestId, string containerId)
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        PickupReceipt receipt;
+        try { receipt = authority.TakeItem(peer, requestId, containerId); }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException)
+        {
+            var invalid = new PickupReceipt(requestId, "", containerId, "questsim:bandage", false, "invalid_request", 0);
+            RpcId(peer, nameof(ItemReply), JsonSerializer.Serialize(invalid), "{}");
+            return;
+        }
+        try
+        {
+            // Inventory, stock and receipt share one atomic save. Never acknowledge before it succeeds.
+            WorldStorage.Save(savePath, authority.State);
+            RpcId(peer, nameof(ItemReply), JsonSerializer.Serialize(receipt), JsonSerializer.Serialize(authority.CharacterFor(peer).Inventory));
+            Publish();
+            WriteStatus();
+            GD.Print($"PICKUP_RESULT actor={receipt.ActorId} request={receipt.RequestId} result={receipt.Reason}");
+        }
+        catch (Exception e) { Fail(e); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void ItemReply(string receiptJson, string inventoryJson)
+    {
+        if (server || own is null) return;
+        lastPickup = JsonSerializer.Deserialize<PickupReceipt>(receiptJson, WorldStorage.JsonOptions) ?? throw new InvalidDataException("Empty item receipt");
+        if (lastPickup.ActorId == own.Id)
+            own.Inventory = JsonSerializer.Deserialize<Dictionary<string, int>>(inventoryJson) ?? throw new InvalidDataException("Missing inventory");
+        itemMessage = lastPickup.Reason switch
+        {
+            "taken" => "Bandage taken.", "empty" => "The crate is empty.",
+            "out_of_reach" => "Move closer to the green crate.", "unknown_container" => "That crate is unavailable.",
+            "inventory_full" => "Cannot carry more bandages.", _ => "Pickup request rejected."
+        };
+        GD.Print($"ITEM_REPLY request={lastPickup.RequestId} result={lastPickup.Reason}");
+    }
+
     private void Publish()
     {
         snapshot = authority!.Snapshot();
@@ -182,7 +262,7 @@ public partial class Session : Node
     }
     private void OnPeerLeft(long peer)
     {
-        if (authority is null || !authority.Leave((int)peer)) return;
+        if (authority is null || failed || !authority.Leave((int)peer)) return;
         try
         {
             WorldStorage.Save(savePath, authority.State);
@@ -240,9 +320,11 @@ public partial class Session : Node
         if (command is null || command.Serial <= commandSerial) return;
         commandSerial = command.Serial;
         desiredX = command.X; desiredZ = command.Z; desiredHeading = command.Heading; testSequence = command.Sequence;
+        if (command.PickupRequestId.Length > 0 || command.RetryPickup)
+            RequestPickup(command.RetryPickup, command.PickupRequestId, command.ContainerId);
         if (command.Quit) GetTree().Quit();
     }
-    public override void _Process(double delta) => view?.UpdateWorld(own is null ? null : snapshot, own?.Id ?? "", profileName, connection, delta);
+    public override void _Process(double delta) => view?.UpdateWorld(own is null ? null : snapshot, own?.Id ?? "", profileName, connection, own?.Inventory.GetValueOrDefault("questsim:bandage") ?? 0, itemMessage, delta);
 
     private void WriteStatus()
     {
@@ -252,12 +334,13 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, fps = Engine.GetFramesPerSecond(),
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, lastPickup, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));
     }
     private void Fail(Exception e)
     {
+        failed = true;
         GD.PushError(e.ToString());
         SetPhysicsProcess(false);
         GetTree().Quit(1);

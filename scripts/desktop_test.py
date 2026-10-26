@@ -72,7 +72,7 @@ class QuestSimWindow:
         return str(path)
 
     def key(self, key, seconds=.12):
-        if key not in {'space', 'w', 'a', 's', 'd', 'q', 'e', 'Up', 'Down', 'c', 'r', 'Escape', '1', '2', '3'}:
+        if key not in {'f', 't', 'space', 'w', 'a', 's', 'd', 'q', 'e', 'Up', 'Down', 'c', 'r', 'Escape', '1', '2', '3'}:
             raise ValueError('Key outside experiment controls')
         if not 0 < seconds <= 3:
             raise ValueError('Input hold exceeds bound')

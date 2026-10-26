@@ -11,6 +11,9 @@ public partial class RoomView : Node3D
     private readonly Label hud = new();
     private readonly Dictionary<string, Node3D> actors = new();
     private bool roomBuilt;
+    private MeshInstance3D supplyBox = null!;
+    private Label3D supplyLabel = null!;
+    public event Action<bool>? PickupRequested;
 
     public override void _Ready()
     {
@@ -39,6 +42,12 @@ public partial class RoomView : Node3D
             Box(this, new Vector3((float)block.X, (float)block.Height / 2, (float)block.Z),
                 new Vector3((float)block.Width, (float)block.Height, (float)block.Depth),
                 block.Id == "questsim:module" ? new Color(1, .8f, .15f) : new Color(.55f, .56f, .6f));
+        supplyBox = Box(this, new Vector3((float)state.Supply.X, .3f, (float)state.Supply.Z), new Vector3(.6f, .6f, .6f), new Color(.2f, .8f, .3f));
+        supplyLabel = new Label3D();
+        supplyLabel.Position = new Vector3((float)state.Supply.X, .9f, (float)state.Supply.Z);
+        supplyLabel.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
+        supplyLabel.FontSize = 32; supplyLabel.PixelSize = .005f;
+        AddChild(supplyLabel);
         roomBuilt = true;
     }
     private Node3D CreateActor(ActorState state, bool local)
@@ -63,16 +72,18 @@ public partial class RoomView : Node3D
         foreach (var actor in actors.Values) actor.QueueFree();
         actors.Clear();
     }
-    public void UpdateWorld(WorldSnapshot? state, string ownId, string profile, string connection, double delta)
+    public void UpdateWorld(WorldSnapshot? state, string ownId, string profile, string connection, int bandages, string itemMessage, double delta)
     {
         Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move | Q/E turn/orbit | Up/Down tilt | C camera | R reset camera\n" +
+            "WASD move | Q/E turn/orbit | Up/Down tilt | C camera | R camera | F take | T retry\n" +
             $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s\n" +
-            "Blue: you. Orange: another player. Close window to disconnect; relaunch same profile to return.";
+            $"Bandages: {bandages} | Crate: {state?.Supply.Count ?? 0} | {itemMessage}";
         if (state is null) return;
         if (!roomBuilt) BuildRoom(state);
+        ((StandardMaterial3D)supplyBox.MaterialOverride).AlbedoColor = state.Supply.Count > 0 ? new Color(.2f, .8f, .3f) : new Color(.3f, .35f, .3f);
+        supplyLabel.Text = state.Supply.Count > 0 ? "Bandage crate" : "Empty crate";
         foreach (string id in actors.Keys.Except(state.Actors.Select(a => a.Id)).ToArray()) { actors[id].QueueFree(); actors.Remove(id); }
         foreach (var a in state.Actors)
         {
@@ -94,6 +105,8 @@ public partial class RoomView : Node3D
     public override void _UnhandledKeyInput(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
+        if (key.Keycode == Key.F) PickupRequested?.Invoke(false);
+        if (key.Keycode == Key.T) PickupRequested?.Invoke(true);
         if (key.Keycode == Key.C) firstPerson = !firstPerson;
         if (key.Keycode == Key.R) { Yaw = -Mathf.Pi / 2; elevation = .65f; }
     }

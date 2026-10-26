@@ -217,7 +217,8 @@ public static class WorldStorage
             (r.Success ? r.Quantity != 1 || r.Reason != "taken" : r.Quantity != 0 || r.Reason is not ("empty" or "out_of_reach" or "unknown_container" or "inventory_full"))) ||
             w.Receipts.Select(r => (r.ActorId, r.RequestId)).Distinct().Count() != w.Receipts.Count)
             throw new InvalidDataException("Invalid/duplicate pickup receipts");
-        if (w.Receipts.Count(r => r.Success) != 1 - supply.Count || w.Receipts.Any(r => r.Success && r.ContainerId != supply.Id))
+        if (w.Receipts.Count(r => r.Success) != 1 - supply.Count || w.Receipts.Any(r => r.Success &&
+            (r.ContainerId != supply.Id || w.Characters.Single(c => c.Id == r.ActorId).Inventory.GetValueOrDefault(r.ItemId) < r.Quantity)))
             throw new InvalidDataException("Supply and pickup receipts disagree");
     }
 }

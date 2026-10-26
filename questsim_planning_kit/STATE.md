@@ -1,46 +1,36 @@
 # QuestSim implementation state
 
-2026-10-25: Q01 complete; Q02a atomic item pickup now authorized.
-Baseline: 237c943 pushed and verified at origin/main; clean on entry.
-Working presentation: low-poly 3D, first/third-person. One flat room for this test;
-broader world structure remains open. Q00 lab/evidence remain intact.
+2026-10-25: Q02a one-item pickup implemented and acceptance checks pass; final docs
+and evidence checkpoint pending. Q01 low-poly 3D/first-third-person baseline retained.
 
-Implemented: CPU headless Godot ENet authority; 20Hz simulation, 10Hz intent/
-snapshots; two independent clients; server-owned position/presence; stable saved
-identity/inventory/experience; absent disconnected actors; validated safe re-entry;
-clock frozen while empty and across restart, resumed on join. Native RPC and plain
-C# state; save/content/protocol v1 with required fields and atomic file replacement.
-Server exclusively owns its save; incompatible/partial data never silently resets.
+Origin git@github.com:adrik0622/QuestSim.git; main tracks origin/main. Director
+explicitly authorized periodic verified pushes. Initial 237c943 push verified.
+Q02 domain checkpoint: 22c932d. All work local to QuestSim; no play saves touched.
 
-Verified: Godot 4.6.2 .NET, SDK 10.0.110/runtime 10.0.10, Manjaro/X11; zero build
-warnings/errors. 24 domain checks, 12 ENet checks, four persistence faults, six
-real two-window GUI checks and three terminal/Ctrl-C checks passed. Screenshots inspected; no current runtime
-errors/warnings in successful runs. Expected injected failure cases exit nonzero.
-Headless server has no GPU device handles. Detailed evidence: Q01_RESULTS.md.
+Implemented: one green bandage crate; server actor/reach/target validation; atomic
+stock/inventory/receipt save before success; actor-scoped canonical request IDs;
+stable positive/negative retry results; client request/target persisted before send;
+F new attempt, T replay. Save/content/protocol v2; valid v1 saves get byte-exact
+.v1-<guid>.bak before replacement, preserving existing identity/items/clock/geometry.
+Q01 profiles remain readable. v2 never restocks on reload. Rebuild server/clients.
 
-Actual debug observations: loopback server ready ~0.45s, clients ~0.70s each;
-headless server RSS ~167 MiB, rendered clients ~336/296 MiB and 60 FPS at 60 cap.
-These are single observations on Ryzen 5950X/RTX 3080 Ti, not scale/release proof.
+Verified: zero build warnings/errors; 38 domain checks, 12 native item checks,
+four real F/T GUI checks, and Q01 regressions (12 ENet, four save faults, three
+launcher/Ctrl-C checks). Captures inspected. Native lost-ack case stops the client
+before server commit, kills server, then replays on restart without duplication.
+Save failure gives no success; retry after failed commit transfers once. Actual
+v1 world/two-field profile migration and non-empty legacy inventory verified.
 
-Resolved failures: startup/final-save error paths found in one bounded read-only
-review are guarded and fault-tested. Duplicate rejection text no longer gets
-replaced by a disconnect message. Ctrl-C now requests a graceful main-thread final save; verified with live clients.
-Test telemetry now waits for asynchronous server
-status refresh; it previously sampled stale status. Raw failed runs retained.
+One bounded read-only review identified a missing conservation check for successful
+receipts with missing awarded inventory; validator now rejects it, test passes.
+No remaining observed runtime failures in successful cases. Intentional disk faults
+exit nonzero; raw evidence under .artifacts/q01/items-* and .artifacts/logs/.
 
-Checkpoints: 63b8ad5 domain/persistence; 320becd real ENet server/clients;
-current HEAD records final GUI/docs/evidence (verify with `git log --oneline`). Origin is git@github.com:adrik0622/QuestSim.git; main tracks origin/main.
-Periodic verified-checkpoint pushes authorized.
-Raw logs and disposable test saves/profiles: .artifacts/q01/ and .artifacts/logs/.
-Source/concise evidence versioned; no actual play save modified. Test children closed.
+Limits unchanged: Linux development/loopback only, no exports/WAN/2–8 load,
+power-loss/directory-fsync guarantee, authentication, camera collision or mouse-look.
+One fixed crate/item, no use/drop/trade/refill or generic inventory/mod framework.
+Yellow construction module stays static. Receipt retention is unbounded for this
+probe; no pruning policy claimed. Future world/gameplay rules remain in DIRECTOR.md.
 
-Known limits: Linux development runs only; no exports, other hardware, 2–8 load,
-WAN tests, auto-reconnect, prediction, camera collision or mouse-look. No power-loss
-or directory-fsync durability guarantee; autosave may lag ~2s on forced termination.
-Profiles are co-op identity, not authentication. Abrupt removal waits for ENet loss
-detection. No NPCs/combat/quests/item transfers/shared building; yellow module is
-static. Future rules remain in DIRECTOR.md. Long-term structure, target hardware
-and weekly capacity are still material open questions, not blockers to this room.
-
-One next action: implement and verify one-item conservation, durable request
-receipts and backed-up Q01 save migration. CURRENT_TASK.md bounds Q02a.
+One next action: finish concise Q02a results/run commands, checkpoint and push the
+verified result; stop before shared construction.
