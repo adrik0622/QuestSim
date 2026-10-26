@@ -114,6 +114,8 @@ tick.
   for code mods until a deliberate trust decision is made.
 - **Populations recover:** losses are refilled over time so players can't exhaust the world
   (e.g. some zombie victims rise as zombies, survivors arrive at towns, zombies migrate in).
+  Implemented 2026-10-26: 30% of zombie victims rise; up to ~20 arrivals per second at 1M
+  agents from a ~10% dormant reserve. Reserve size and rates are the tuning knobs.
 - **NPC pop-in:** avoid promoting NPCs right next to players; drawing simple placeholders for
   nearby background people is a stretch goal.
 

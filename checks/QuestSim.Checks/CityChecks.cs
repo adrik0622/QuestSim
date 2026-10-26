@@ -53,7 +53,7 @@ public static class CityChecks
         double MeanHomeDistance()
         {
             var home = pop.Settlements;
-            return Enumerable.Range(0, pop.Count).Where(i => !Population.IsZombie(pop.Info[i]) && (pop.Info[i] & Population.Travelling) == 0)
+            return Enumerable.Range(0, pop.Count).Where(i => !Population.IsZombie(pop.Info[i]) && (pop.Info[i] & (Population.Travelling | Population.Dead)) == 0)
                 .Average(i => { var s = home[(int)(pop.Info[i] & 0xFFFFFF)]; return Math.Abs(Population.ToMetres(pop.PosX[i]) - s.X) + Math.Abs(Population.ToMetres(pop.PosZ[i]) - s.Z); });
         }
         while (Population.GameHour(pop.Tick * 48.0) < 14) pop.Step();
@@ -63,12 +63,32 @@ public static class CityChecks
         check(night < day * .6, $"humans head home at night: mean distance from home {day:0} m at 14:00, {night:0} m at 23:30");
 
         var hunted = new Population(gen, 60_000);
-        long humans = Enumerable.Range(0, hunted.Count).LongCount(i => !Population.IsZombie(hunted.Info[i]));
-        long zombies = hunted.Count - humans, lostHumans = 0, lostZombies = 0;
+        long humans = hunted.TargetHumans, zombies = hunted.TargetZombies, lostHumans = 0, lostZombies = 0;
         for (int t = 0; t < 120; t++) { hunted.Step(); lostHumans += hunted.SettlementLosses.Values.Sum(); lostZombies += hunted.ZombieLosses; hunted.SettlementLosses.Clear(); }
-        long deadHumans = Enumerable.Range(0, hunted.Count).LongCount(i => !Population.IsZombie(hunted.Info[i]) && (hunted.Info[i] & Population.Dead) != 0);
-        check(lostHumans > 0 && lostZombies > 0 && deadHumans == lostHumans && deadHumans < humans / 10,
-            $"away from players, hordes and settlements wear each other down: {lostHumans} of {humans} humans and {lostZombies} of {zombies} zombies lost in 120 coarse ticks (~1.6 game hours)");
+        long deadHumans = Enumerable.Range(0, hunted.Count).LongCount(i => !Population.IsZombie(hunted.Info[i]) && (hunted.Info[i] & Population.Dead) != 0 &&
+            !Population.IsDormant(hunted.Info[i]));
+        check(lostHumans > 0 && lostZombies > 0 && deadHumans + hunted.Risen == lostHumans && lostHumans < humans / 10,
+            $"away from players, hordes and settlements wear each other down: {lostHumans} of {humans} humans ({hunted.Risen} rose as zombies) and {lostZombies} of {zombies} zombies lost in 120 coarse ticks (~1.6 game hours)");
+
+        var growing = new Population(gen, 60_000);
+        long dormant = Enumerable.Range(0, growing.Count).LongCount(i => Population.IsDormant(growing.Info[i]));
+        uint human = Population.HumanLossThreshold, zombie = Population.ZombieLossThreshold;
+        try
+        {
+            Population.HumanLossThreshold = Population.ZombieLossThreshold = uint.MaxValue / 40;   // a brutal stretch of fighting
+            for (int t = 0; t < 60; t++) growing.Step();
+            long Living(bool z) => Enumerable.Range(0, growing.Count).LongCount(i => (growing.Info[i] & Population.Dead) == 0 && Population.IsZombie(growing.Info[i]) == z);
+            long lowHumans = Living(false);
+            Population.HumanLossThreshold = human; Population.ZombieLossThreshold = zombie;
+            for (int t = 0; t < 400; t++) growing.Step();
+            long townIndex = growing.Settlements.Count - gen.Towns.Count;
+            long arrivedInTowns = Enumerable.Range(0, growing.Count).LongCount(i => (growing.Info[i] & Population.Dead) == 0 && !Population.IsZombie(growing.Info[i]) &&
+                (growing.Info[i] & 0xFFFFFF) >= townIndex);
+            check(dormant > 4_000 && dormant < 8_000 && growing.Risen > 0 && growing.Arrived > 0 && Living(false) > lowHumans && arrivedInTowns > 0,
+                $"populations recover: {dormant} dormant slots; after heavy losses ({growing.TargetHumans - lowHumans} humans down, {growing.Risen} rose as zombies) " +
+                $"{growing.Arrived} newcomers arrive at towns and edges; humans {lowHumans} -> {Living(false)} of {growing.TargetHumans}");
+        }
+        finally { Population.HumanLossThreshold = human; Population.ZombieLossThreshold = zombie; }
 
         var world = new WorldAuthority(new WorldSave());
         var tower = Enumerable.Range(0, 3).SelectMany(cx => world.City.Chunk(cx, 0)).First();

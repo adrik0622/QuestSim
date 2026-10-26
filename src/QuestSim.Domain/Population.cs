@@ -9,6 +9,15 @@ namespace QuestSim.Domain;
 public sealed class Population
 {
     public const uint Zombie = 1u << 31, Travelling = 1u << 30, Detailed = 1u << 29, Dead = 1u << 28, None = uint.MaxValue;
+    public const uint Dormant = Dead | 0xFFFFFF;   // a not-yet-arrived agent: dead flag plus an impossible home settlement
+    public static bool IsDormant(uint info) => (info & Dormant) == Dormant;
+    public uint Hordes { get; }
+    public long TargetHumans { get; private set; }
+    public long TargetZombies { get; private set; }
+    public long Arrived { get; private set; }
+    public long Risen { get; private set; }
+    public static uint RiseThreshold = (uint)(0.3 * uint.MaxValue);
+    readonly int towns;
     public const int GameSecondsPerTick = 48, HumanFactions = 3, Hostile = 2;
     // A coarse tick is one real second: people walk at real-time speed, the same as in detail. The 48:1 compression
     // applies to the clock (days, quests), not to walking. Hordes pick a new target every 20 real minutes.
@@ -51,6 +60,8 @@ public sealed class Population
         TableMask = (uint)BitOperations.RoundUpToPowerOf2((ulong)Math.Max(1024, count * 2)) - 1;
         heads = new uint[TableMask + 1L]; humanHeads = new uint[TableMask + 1L]; humanNext = new uint[count];
         uint hordes = (uint)Math.Max(2, count * (1 - humanFraction) / 5000);
+        Hordes = hordes;
+        towns = city.Towns.Count;
         uint humanCut = (uint)(humanFraction * uint.MaxValue);
         for (uint i = 0; i < count; i++)
         {
@@ -70,6 +81,9 @@ public sealed class Population
             PosX[i] = TgtX[i] = Offset(settleX[home], Hash4((uint)Seed, 4, i, 0), spread);
             PosZ[i] = TgtZ[i] = Offset(settleZ[home], Hash4((uint)Seed, 5, i, 0), spread);
             Info[i] = info;
+            // About a tenth of the slots start dormant: future arrivals get fresh IDs instead of reusing the dead's.
+            if (Hash4((uint)Seed, 14, i, 0) % 10 == 0) Info[i] = (info & ~0xFFFFFFu) | Dormant;
+            else if (IsZombie(info)) TargetZombies++; else TargetHumans++;
         }
         BuildGrid();
     }
@@ -104,6 +118,7 @@ public sealed class Population
         Parallel.ForEach(partitions, range => { for (int i = range.Item1; i < range.Item2; i++) Move((uint)i, tick); });
         BuildGrid();
         Encounters(tick, partitions);
+        Recover(tick);
         var carriers = new uint[64];
         var members = new long[16];
         bool spreading = rumors is not null && (rumors.ActiveLo | rumors.ActiveHi) != 0;
@@ -128,6 +143,45 @@ public sealed class Population
         Tick++;
     }
 
+    // Below starting strength, dormant agents wake: survivors arrive at the outlying towns, zombies migrate in from the edges.
+    void Recover(uint tick)
+    {
+        long humans = 0, zombies = 0;
+        for (int i = 0; i < Count; i++)
+        {
+            uint info = Info[i];
+            if ((info & Dead) != 0) continue;
+            if (IsZombie(info)) zombies++; else humans++;
+        }
+        long cap = Math.Max(1, Count / 50_000), humanGap = Math.Min(cap, TargetHumans - humans), zombieGap = Math.Min(cap, TargetZombies - zombies);
+        for (uint i = 0; i < Count && (humanGap > 0 || zombieGap > 0); i++)
+        {
+            if (!IsDormant(Info[i])) continue;
+            bool zombie = IsZombie(Info[i]);
+            if (zombie ? zombieGap <= 0 : humanGap <= 0) continue;
+            uint h = Hash4((uint)Seed, tick, i, 0xD00);
+            if (zombie)
+            {
+                uint horde = h % Hordes, edge = Mix(h) % 4, along = Mix(h ^ 1) % (2u * CityGen.Half * 1000);
+                uint far = 2u * CityGen.Half * 1000 - 500_000, near = 500_000;
+                PosX[i] = edge switch { 0 => near, 1 => far, _ => along };
+                PosZ[i] = edge switch { 2 => near, 3 => far, _ => along };
+                Info[i] = Zombie | ((uint)(HumanFactions + horde % 2) << 24) | horde;
+                zombieGap--;
+            }
+            else
+            {
+                int town = Settlements.Count - 1 - (int)(h % (uint)Math.Max(1, towns));
+                PosX[i] = Offset(settleX[town], Mix(h), WanderRadius);
+                PosZ[i] = Offset(settleZ[town], Mix(h ^ 2), WanderRadius);
+                Info[i] = ((uint)SettlementFaction[town] << 24) | (uint)town;
+                humanGap--;
+            }
+            TgtX[i] = PosX[i]; TgtZ[i] = PosZ[i]; MaskLo[i] = MaskHi[i] = 0;
+            Arrived++;
+        }
+    }
+
     // Away from players, zombies and humans in contact (5 m) may kill each other: a small deterministic chance per pair
     // and tick. Detailed agents belong to the authority and are skipped. Losses per settlement feed "attack" facts.
     public const uint EncounterRadius = 5_000;
@@ -138,6 +192,7 @@ public sealed class Population
     void Encounters(uint tick, OrderablePartitioner<Tuple<int, int>> partitions)
     {
         var dying = new ConcurrentBag<uint>();
+        var bitten = new ConcurrentBag<(uint Human, uint Zombie)>();
         ulong r2 = (ulong)EncounterRadius * EncounterRadius;
         Parallel.ForEach(partitions, range =>
         {
@@ -153,18 +208,32 @@ public sealed class Population
                             if ((Info[h] & Detailed) != 0) continue;
                             long dx = (long)PosX[h] - PosX[z], dz = (long)PosZ[h] - PosZ[z];
                             if ((ulong)(dx * dx + dz * dz) > r2) continue;
-                            if (Hash4((uint)Seed, tick, z, Mix(h) ^ 0xA00) < HumanLossThreshold) dying.Add(h);
+                            if (Hash4((uint)Seed, tick, z, Mix(h) ^ 0xA00) < HumanLossThreshold) bitten.Add((h, z));
                             if (Hash4((uint)Seed, tick, h, Mix(z) ^ 0xB00) < ZombieLossThreshold) dying.Add(z);
                         }
             }
         });
         SettlementLosses.Clear();
         ZombieLosses = 0;
+        // Some victims of zombies rise and join the horde that killed them (same slot, same identity).
+        foreach (var (h, z) in bitten.GroupBy(b => b.Human).Select(g => g.OrderBy(b => b.Zombie).First()).OrderBy(b => b.Human))
+        {
+            int home = (int)(Info[h] & 0xFFFFFF);
+            SettlementLosses[home] = SettlementLosses.GetValueOrDefault(home) + 1;
+            if (Hash4((uint)Seed, tick, h, 0xC00) < RiseThreshold)
+            {
+                Info[h] = Zombie | (Info[z] & (15u << 24)) | (Info[z] & 0xFFFFFF);
+                MaskLo[h] = MaskHi[h] = 0;
+                TgtX[h] = PosX[h]; TgtZ[h] = PosZ[h];
+                Risen++;
+            }
+            else Info[h] |= Dead;
+        }
         foreach (uint d in dying.Distinct().Order())
         {
+            if ((Info[d] & Dead) != 0) continue;
             Info[d] |= Dead;
-            if (IsZombie(Info[d])) ZombieLosses++;
-            else { int home = (int)(Info[d] & 0xFFFFFF); SettlementLosses[home] = SettlementLosses.GetValueOrDefault(home) + 1; }
+            ZombieLosses++;
         }
     }
 

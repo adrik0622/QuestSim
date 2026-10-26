@@ -83,7 +83,11 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
 - Keep: exactly-once costs and receipts, last-cell races, persistence and multiplayer convergence
   from Q02b; the BACKLOG Q06 doorway/pathing acceptance applies once zombies path around walls.
 
-### F16 - Population recovery (director 2026-10-26)
+### F16 - Population recovery (director 2026-10-26) — first version done
+- Done: ~10% of slots start dormant (fresh IDs for newcomers; IDs never reused). 30% of humans
+  killed by zombies rise and join the killer's horde. Each coarse tick, a side below its starting
+  strength wakes dormant agents (cap ≈ population/50,000 per tick): humans arrive at outlying
+  towns, zombies at the map edges. Rates are tunable; reserve exhaustion ends recovery.
 - Outcome: losses refill over time so players can't exhaust the world: some zombie victims rise
   as zombies, survivors arrive at outlying towns, zombies migrate in from the map edges; rates
   are tunable and persisted.
