@@ -6,12 +6,15 @@ All timeboxes are approximate experienced-engineer effort, with placeholder asse
 
 - Owner: director and integration owner. Dependency: none. Timebox: 1-2 days.
 - Outcome: one-page scope contract with camera, excavation, players, target hardware, weekly capacity, player absence policy and acceptable approximation.
-- Confirmed: modular building, two clients first/2–8 validation/16 target, CPU authority, no digging. Presentation remains open; DIRECTOR.md supersedes old defaults.
+- Confirmed: modular building, two clients first/2–8 validation/16 target, CPU authority, no digging. Low-poly 3D with first/third-person selected for Q01; broader structure remains open. DIRECTOR.md supersedes old defaults.
 - Deliver: contract, initial risk list and measurement scenarios.
 - Acceptance: the director can describe the first shared scene and its explicit exclusions.
 - Stop: unresolved camera or excavation scope means no large art/terrain investment yet. Research and basic authority work can continue.
 
 ## Q01 - Export and connect
+
+Local two-client/persistence increment verified 2026-10-25; see Q01_RESULTS.md.
+Standalone exports, other platforms and 2–8 load coverage remain explicit future checks.
 
 - Owner: integration/platform agent. Dependency: Q00. Timebox: 3-5 days.
 - Outcome after presentation selection: a tiny shared space runs as two independent clients and a Godot CPU-only headless server. Synchronize presence/movement; persist identity/inventory/progression on reconnect, remove disconnected actors, validate safe re-entry, and pause the simulation clock while empty.

@@ -45,6 +45,7 @@ class NetworkFixture:
         self.processes = {}
         self.serials = {}
         self.startups = {}
+        self.started = {}
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
             probe.bind(('127.0.0.1', 0))
             self.port = probe.getsockname()[1]
@@ -64,7 +65,7 @@ class NetworkFixture:
         started = time.monotonic()
         process = subprocess.Popen(args, cwd=ROOT, stdout=output, stderr=subprocess.STDOUT)
         self.processes[label] = (process, output)
-        self.startups[label] = started
+        self.started[label] = started
         return process
 
     def status(self, label):
@@ -75,7 +76,7 @@ class NetworkFixture:
             status = self.status(label)
             return status if status and status['snapshot'] and (count is None or len(status['snapshot']['Actors']) == count) and (status['role'] == 'server' or status['ownId']) else None
         value = wait(condition, label + ' ready')
-        self.startups[label] = round(time.monotonic() - self.startups[label], 3)
+        self.startups[label] = round(time.monotonic() - self.started[label], 3)
         return value
 
     def command(self, label, x=0, z=0, **extra):
@@ -133,8 +134,8 @@ def main():
         passed('CPU headless server starts paused with no GPU device handles')
         f.launch('alice', 'alice'); a = f.ready('alice', 1); aid = a['ownId']
         f.launch('bob', 'bob'); b = f.ready('bob', 2); bid = b['ownId']
-        wait(lambda: f.status('alice')['active'] == 2, 'late join visible to first client')
-        assert aid != bid and f.status('server')['active'] == 2
+        wait(lambda: f.status('alice')['active'] == 2 and f.status('server')['active'] == 2, 'late join visible to first client and server telemetry')
+        assert aid != bid
         passed('two independent clients join, including late join, with distinct stable characters')
         profiles_hash = hashlib.sha256((f.profiles / 'alice.json').read_bytes()).hexdigest()
         clone = f.directory / 'clone'; clone.mkdir()

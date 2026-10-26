@@ -1,30 +1,44 @@
 # QuestSim implementation state
 
-2026-10-25: Q01 authorized. Low-poly 3D with first/third-person is the working
-selection after director review; broader world structure remains open. Q00 evidence
-and standalone lab are preserved. Baseline commit: 99e1c81; clean on entry.
+2026-10-25: Q01 two-client acceptance complete; stop at this increment's boundary.
+Working presentation: low-poly 3D, first/third-person. One flat room for this test;
+broader world structure remains open. Q00 lab/evidence remain intact.
 
-Current outcome: implement CPU headless authority and two independent clients,
-shared movement/presence, persistent reconnect with absent disconnected characters,
-safe re-entry and an empty-world-paused simulation clock. CURRENT_TASK.md bounds it.
+Implemented: CPU headless Godot ENet authority; 20Hz simulation, 10Hz intent/
+snapshots; two independent clients; server-owned position/presence; stable saved
+identity/inventory/experience; absent disconnected actors; validated safe re-entry;
+clock frozen while empty and across restart, resumed on join. Native RPC and plain
+C# state; save/content/protocol v1 with required fields and atomic file replacement.
+Server exclusively owns its save; incompatible/partial data never silently resets.
 
-Verified prerequisites unchanged: Godot 4.6.2 .NET, SDK 10.0.110/runtime 10.0.10,
-Linux/X11 desktop input/screenshots. Q01 domain checks and real ENet integration now pass. Existing
-seven fixture checks and presentation/desktop evidence are recorded in RUNBOOK.md.
+Verified: Godot 4.6.2 .NET, SDK 10.0.110/runtime 10.0.10, Manjaro/X11; zero build
+warnings/errors. 24 domain checks, 12 ENet checks, four persistence faults, six
+real two-window GUI checks and three terminal/Ctrl-C checks passed. Screenshots inspected; no current runtime
+errors/warnings in successful runs. Expected injected failure cases exit nonzero.
+Headless server has no GPU device handles. Detailed evidence: Q01_RESULTS.md.
 
-Design: native ENet/RPC; plain C# state; fixed 20Hz authority; save/protocol v1,
-atomic JSON replace; local profiles independent of transient peer IDs. No existing
-saves require migration. Inventory/progression are persisted data, no gameplay UI.
+Actual debug observations: loopback server ready ~0.45s, clients ~0.70s each;
+headless server RSS ~167 MiB, rendered clients ~336/296 MiB and 60 FPS at 60 cap.
+These are single observations on Ryzen 5950X/RTX 3080 Ti, not scale/release proof.
 
-Pending creative questions: long-term world structure, reference hardware and weekly
-capacity. No need to block this small room experiment on those choices.
-Verified Q01: 24 domain checks including the original seven fixture checks;
-12 real ENet checks for two processes, late join/convergence, rejected duplicate
-identity/input, abrupt leave, paused clock, restart, preserved identity/inventory/
-progression, changed-world safe re-entry and incompatible-save rejection. Four
-fault tests verify exclusive save ownership, failed-startup preservation and
-nonzero exit on final-save failure. Build has zero warnings/errors.
-Raw evidence: .artifacts/q01/network-1792983860405593992/ and
-.artifacts/q01/save-failures-1792983875899224968/. One bounded read-only review
-found the startup/final-save risks, now corrected and tested.
-Next action: verify two rendered clients with owned-window screenshots and keys.
+Resolved failures: startup/final-save error paths found in one bounded read-only
+review are guarded and fault-tested. Duplicate rejection text no longer gets
+replaced by a disconnect message. Ctrl-C now requests a graceful main-thread final save; verified with live clients.
+Test telemetry now waits for asynchronous server
+status refresh; it previously sampled stale status. Raw failed runs retained.
+
+Checkpoints: 63b8ad5 domain/persistence; 320becd real ENet server/clients;
+current HEAD records final GUI/docs/evidence (verify with `git log --oneline`). No remote/push; all changes local.
+Raw logs and disposable test saves/profiles: .artifacts/q01/ and .artifacts/logs/.
+Source/concise evidence versioned; no actual play save modified. Test children closed.
+
+Known limits: Linux development runs only; no exports, other hardware, 2–8 load,
+WAN tests, auto-reconnect, prediction, camera collision or mouse-look. No power-loss
+or directory-fsync durability guarantee; autosave may lag ~2s on forced termination.
+Profiles are co-op identity, not authentication. Abrupt removal waits for ENet loss
+detection. No NPCs/combat/quests/item transfers/shared building; yellow module is
+static. Future rules remain in DIRECTOR.md. Long-term structure, target hardware
+and weekly capacity are still material open questions, not blockers to this room.
+
+One next action: Q02's first atomic item interaction, with two-client last-item race,
+request retry deduplication and persisted result. Do not begin it during this handoff.

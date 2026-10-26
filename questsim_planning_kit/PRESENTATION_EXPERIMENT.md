@@ -1,5 +1,9 @@
 # Presentation comparison — 2026-10-25
 
+Follow-up: the director authorized Q01 after reviewing low-poly 3D; that is now
+the working presentation with first/third-person. See Q01_RESULTS.md. This report
+retains the original comparison evidence; broader world structure remains open.
+
 The three disposable modes run on the actual Linux desktop. The initial comparison
 is complete within the one-working-day ceiling (under one hour of session work,
 including bootstrap); no extension or production pipeline work began.
@@ -94,8 +98,8 @@ these measurements.
 
 ## Decision and remaining limits
 
-Director decision: choose representation and supported camera(s) for Q01; choose
-world structure independently. The experiment proves only a floor plus raised steps,
+Q01 selection: low-poly 3D and first/third-person after director review; world
+structure remains a separate decision. The experiment proves only a floor plus raised steps,
 not stacked floors, continuous vertical gameplay or a persistent 3D world. Proposed
 next scope: small flat shared space, modular piece, CPU authority and two clients;
 refine controls around the approved presentation before implementation.

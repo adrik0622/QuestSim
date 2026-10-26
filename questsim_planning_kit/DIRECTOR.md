@@ -40,7 +40,7 @@ Choose these before investing in assets or terrain infrastructure:
 
 | Decision | Proposed starting assumption | Why it matters |
 | --- | --- | --- |
-| Presentation | Open; separate structure, representation and camera | Compare three small scenes before selection. |
+| Presentation | Q01 low-poly 3D with first/third-person; broader structure open | Comparison and two-client evidence retained. |
 | Construction | Modular grid walls/doors/containers | Proves base building without excavation technology. |
 | Digging | Deferred | If mandatory, evaluate Luanti/block voxels before committing to Godot terrain. |
 | Multiplayer | 2 first, validate 2–8, aim 16 | 32–64 deferred to scalability experiments. |

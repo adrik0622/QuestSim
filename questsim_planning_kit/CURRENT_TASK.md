@@ -1,6 +1,7 @@
 # Current task: Q01 / two clients and persistent presence
 
-Authorized 2026-10-25 after the low-poly 3D review. Treat moving on as choosing
+Status: acceptance complete 2026-10-25; Q01_RESULTS.md records evidence and limits.
+Authorized after the low-poly 3D review. Treat moving on as choosing
 low-poly 3D with first/third-person for this increment; broader world structure
 remains open. One flat 12m room is the fixture, not a stacked-floor commitment.
 

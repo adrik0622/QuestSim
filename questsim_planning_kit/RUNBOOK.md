@@ -26,7 +26,7 @@ After full access .git was absent; a normal local repository was initialized.
 | Command | Result / purpose |
 | --- | --- |
 | `bash scripts/install_godot.sh` | Pinned official archive, SHA-256 checked, local extraction; preserves existing installation. Initial download/extraction steps verified manually; preservation branch verified through script. |
-| `bash scripts/check.sh` | Offline Release build and seven domain fixture checks; no network/engine/persistence claim. |
+| `bash scripts/check.sh` | Offline Release build, 24 domain checks including seven original fixture checks; real network checks are separate below. |
 | `bash scripts/build_presentation.sh` | Godot C# Debug build, zero warnings/errors. |
 | `.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64 --headless --path experiments/presentation --quit-after 2` | Bootstrap smoke; prints `QUESTSIM_BOOTSTRAP_READY actors=4`. This is not an authoritative server. |
 | `bash scripts/run_presentation.sh 2d` | Overhead sprites. |
@@ -79,5 +79,85 @@ pattern. It is unnecessary now and has not been implemented/tested.
 
 GUI checks briefly focus QuestSim. Keep unrelated apps out of the foreground during
 the bounded suite. Test processes terminate afterward; the sibling helper stays running.
-No desktop exports, remote platforms, server, two-client networking, persistence,
-reconnect or empty-world clock have been implemented/tested yet.
+Q00 proved desktop access only. Q01 server/client/persistence verification is
+recorded below; standalone exports and other platforms remain untested.
+
+## Q01 — authoritative shared room
+
+The low-poly 3D shared game is `src/QuestSim.Game/`. The presentation lab above
+remains a separate disposable comparison. Q01 has no NPCs or shared construction
+transactions; its yellow module is a static server-owned obstacle.
+
+Run from QuestSim, each launch in a **separate terminal**:
+
+```bash
+bash scripts/build_game.sh
+bash scripts/run_server.sh
+bash scripts/run_client.sh alice
+bash scripts/run_client.sh bob
+```
+
+The server uses CPU/headless Godot with no RoomView/Node3D creation. Default bind:
+`127.0.0.1`, UDP port `27840`, maximum 8 connections (only **two validated**).
+Override with `--port=...`; clients also accept `--host=...`. For an explicit LAN
+test, server can use `--bind=0.0.0.0`; no firewall/router changes are made by scripts.
+LAN/WAN behavior has not been verified. No public service/authentication built.
+
+WASD moves relative to camera; Q/E turns/orbits; Up/Down tilts; C switches
+first/third person; R resets **camera only**. Movement always comes from the server.
+Blue is your character, orange is another player. Close a client window to leave;
+relaunch the same profile name to reconnect. On server loss the client clears
+active visuals and shows disconnected status; restart it to retry (no auto-retry).
+
+Default data: `.artifacts/play/world.json` and `.artifacts/play/profiles/{name}.json`.
+Profile files retain local identity tokens; preserve them along with the world.
+Server-owned character GUIDs differ from temporary network peer IDs. Profiles are
+co-op identity, not authenticated accounts. Copying an active identity is rejected;
+there is no account ownership protection against impersonation after logout.
+No credentials or actual play saves are committed.
+
+World save format **1**, content ID `questsim:q01-room-v1`, wire protocol **1**:
+no earlier game save/wire format existed. Required fields and version/content are
+validated; unsupported/incomplete saves fail without reset/overwrite. Saves contain
+characters, positions, inventory dictionaries, experience, canonical block geometry
+and simulation ticks. Active connections/held intents are not saved. Initial
+inventory/progression are empty/zero; there is no item or progression gameplay yet.
+The acceptance suite seeds non-empty values offline to prove round-trip retention.
+
+The server holds an exclusive `.lock` file handle while owning a world; the lock
+file remaining on disk is normal. Saves flush a `.tmp` file, then atomically replace
+the previous save on join/leave, every 2s while active and normal shutdown. A failed
+startup never writes loaded state; failed final persistence exits nonzero. Forced
+kill/power loss can lose changes since the last checkpoint (up to ~2s under ordinary
+running); directory-fsync/power-loss durability and migrations are not claimed.
+
+Uses Godot’s [native ENet/RPC API](https://docs.godotengine.org/en/4.6/tutorials/networking/high_level_multiplayer.html).
+Authority ticks at 20Hz; input/snapshots at 10Hz. Ticks stop with zero joined
+characters, while network/status polling continues. Restart does not add wall time.
+Idle quest timing will eventually use this clock; no quest system exists yet.
+Input expires after five world ticks (~250ms). Remote loss removes a body when ENet
+confirms disconnection; timeout policy is configured, not an instantaneous unplug
+promise. Re-entry validates room/blocks/other active players and searches nearby
+free grid cells; it refuses if none is safe. Rendering interpolates snapshots;
+no client prediction or WAN smoothing work has been done.
+
+Verified checks (fresh disposable `.artifacts/q01/*` directories, never play saves):
+
+```bash
+bash scripts/check.sh                         # 24 domain/fixture checks
+python3 scripts/verify_multiplayer.py          # 12 real ENet checks
+python3 scripts/verify_save_failures.py         # 4 startup/shutdown persistence faults
+python3 scripts/verify_shared_desktop.py        # 6 real two-window checks + screenshots
+python3 scripts/verify_terminal_shutdown.py     # 3 launcher/Ctrl-C/disconnected-state checks
+```
+
+The headless network test's explicit `--intent-file` option feeds the same client
+movement RPC as keyboard input. It does not inject server state. Changed geometry
+and non-empty inventory/progression are fixtures edited only after all processes
+stop. `--status=PATH` writes optional atomic diagnostics; `--shutdown-file=PATH`
+allows controlled test shutdown. Neither is needed for ordinary play.
+
+Q01_RESULTS.md records measured startup/memory, verified checks and known limits.
+Other OS/hardware, 2–8 load, exported binaries, packet-loss/latency behavior and
+crash/power-loss durability remain unverified. The old Q00 frame samples are not
+measurements of this networked scene. Full raw evidence stays in `.artifacts/`.

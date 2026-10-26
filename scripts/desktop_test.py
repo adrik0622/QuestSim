@@ -15,15 +15,19 @@ def run(*args):
 
 
 class QuestSimWindow:
-    def __init__(self, name, *args, scene='Bootstrap.tscn'):
+    def __init__(self, name, *args, scene='Bootstrap.tscn', game=False):
         if not re.fullmatch(r'[a-z0-9_-]+', name):
             raise ValueError('Invalid evidence name')
-        if scene not in {'Bootstrap.tscn', 'Lab.tscn'}:
+        if game:
+            scene = 'Session.tscn'
+        self.title = 'QuestSim Shared Room' if game else 'QuestSim Presentation Lab'
+        project = 'src/QuestSim.Game' if game else 'experiments/presentation'
+        if scene not in {'Bootstrap.tscn', 'Lab.tscn', 'Session.tscn'}:
             raise ValueError('Unknown QuestSim scene')
         OUT.mkdir(parents=True, exist_ok=True)
         self.log = (OUT / f'{name}.log').open('w')
         env = dict(os.environ, DOTNET_CLI_HOME=str(ROOT / '.local/dotnet'), NUGET_PACKAGES=str(ROOT / '.local/nuget'))
-        self.process = subprocess.Popen([str(ENGINE), '--path', str(ROOT / 'experiments/presentation'), 'res://' + scene, '--', *args],
+        self.process = subprocess.Popen([str(ENGINE), '--path', str(ROOT / project), 'res://' + scene, '--', *args],
                                         cwd=ROOT, env=env, stdout=self.log, stderr=subprocess.STDOUT)
         self.window = None
         try:
@@ -31,7 +35,7 @@ class QuestSimWindow:
             while time.monotonic() < deadline and self.process.poll() is None:
                 try:
                     ids = run('xdotool', 'search', '--onlyvisible', '--pid', self.process.pid).splitlines()
-                    found = [w for w in ids if run('xdotool', 'getwindowname', w) in {'QuestSim Presentation Lab', 'QuestSim Presentation Lab (DEBUG)'}]
+                    found = [w for w in ids if run('xdotool', 'getwindowname', w) in {self.title, self.title + ' (DEBUG)'}]
                     if len(found) == 1:
                         self.window = found[0]
                         self.focus()
@@ -49,7 +53,7 @@ class QuestSimWindow:
             raise RuntimeError('QuestSim child is not running')
         if run('xdotool', 'getwindowpid', self.window) != str(self.process.pid):
             raise RuntimeError('Window owner changed')
-        if run('xdotool', 'getwindowname', self.window) not in {'QuestSim Presentation Lab', 'QuestSim Presentation Lab (DEBUG)'}:
+        if run('xdotool', 'getwindowname', self.window) not in {self.title, self.title + ' (DEBUG)'}:
             raise RuntimeError('Window title changed')
 
     def focus(self):

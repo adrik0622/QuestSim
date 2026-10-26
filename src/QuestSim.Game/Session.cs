@@ -15,6 +15,7 @@ public partial class Session : Node
     private string profileId = "", profileName = "", savePath = "", statusPath = "", intentPath = "", shutdownPath = "";
     private string connection = "Connecting";
     private bool server, connected, serverStarted;
+    private volatile bool shutdownRequested;
     private FileStream? saveLock;
     private int frame;
     private double saveElapsed, statusElapsed, desiredX, desiredZ, desiredHeading = -Math.PI / 2;
@@ -98,9 +99,16 @@ public partial class Session : Node
             Multiplayer.MultiplayerPeer = network;
             WriteStatus();
             serverStarted = server;
+            if (server) Console.CancelKeyPress += OnCancelKeyPress;
             GD.Print($"SESSION_READY role={(server ? "server" : "client")} profile={profileName} display={DisplayServer.GetName()} protocol=1 port={port}");
         }
         catch (Exception e) { Fail(e); }
+    }
+
+    private void OnCancelKeyPress(object? sender, ConsoleCancelEventArgs e)
+    {
+        e.Cancel = true;
+        shutdownRequested = true; // The signal callback never touches Godot objects.
     }
 
     private void OnConnected()
@@ -197,7 +205,7 @@ public partial class Session : Node
         try
         {
             frame++;
-            if (shutdownPath.Length > 0 && File.Exists(shutdownPath)) { GetTree().Quit(); return; }
+            if (shutdownRequested || (shutdownPath.Length > 0 && File.Exists(shutdownPath))) { GetTree().Quit(); return; }
             if (server)
             {
                 authority!.Step();
@@ -258,6 +266,7 @@ public partial class Session : Node
     {
         try { if (serverStarted && authority is not null && savePath.Length > 0) WorldStorage.Save(savePath, authority.State); }
         catch (Exception e) { GD.PushError("Final save failed: " + e.Message); GetTree().Quit(1); }
+        if (server) Console.CancelKeyPress -= OnCancelKeyPress;
         network?.Close();
         saveLock?.Dispose();
     }
