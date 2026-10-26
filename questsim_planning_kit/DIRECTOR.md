@@ -30,8 +30,9 @@ to investigate against cost and gameplay, not architecture requirements. Keep
 Godot .NET/C# unless an actual blocker justifies reconsideration; no engine survey.
 The one-day disposable comparison is complete; see PRESENTATION_EXPERIMENT.md
 for measurements, screenshots and limitations. Low-poly 3D with first/third-person
-is the implementation recommendation; director selection remains pending. No
-production assets or pipeline expansion before that decision.
+was the implementation recommendation. The director authorized the two-client
+increment after reviewing low-poly 3D on 2026-10-25; use that presentation with
+first/third-person for Q01. Broader world structure and production art remain open.
 
 ## Remaining creative contract
 

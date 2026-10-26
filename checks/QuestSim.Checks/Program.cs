@@ -35,3 +35,4 @@ var replay = new PresentationScenario();
 for (int i = 0; i < 1200; i++) replay.Step(1.0 / 60);
 Check(previous.SequenceEqual(replay.GetActors()), "same steps reproduce identical fixture poses");
 Console.WriteLine("Offline domain fixture only; no engine, collision, networking or persistence verified.");
+AuthorityChecks.Run(Check);

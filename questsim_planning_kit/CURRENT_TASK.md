@@ -1,31 +1,26 @@
-# Current task: Q00 / environment and presentation probe
+# Current task: Q01 / two clients and persistent presence
 
-Status 2026-10-25: comparison complete; director selection pending.
-One implementer; one bounded desktop-discovery helper used read-only.
-See PRESENTATION_EXPERIMENT.md for evidence and STATE.md for one next action.
+Authorized 2026-10-25 after the low-poly 3D review. Treat moving on as choosing
+low-poly 3D with first/third-person for this increment; broader world structure
+remains open. One flat 12m room is the fixture, not a stacked-floor commitment.
 
-Order: inspect actual files/tools; launch the smallest Godot .NET project;
-compare presentation; report evidence for director selection; continue only
-independent environment/desktop/minimal simulation work while selection is pending.
+Acceptance:
+- Godot .NET CPU-only headless authoritative server; two independent clients.
+- Clients submit bounded movement intent; server owns positions and presence.
+- Stable character identity/inventory/progression survive disconnect and restart.
+- Disconnected characters are absent; occupied/changed re-entry positions relocate safely.
+- Fixed simulation ticks stop while empty, resume on join; no offline wall-time catch-up.
+- Verify real ENet processes, late join, convergence, duplicate identity/input,
+  reconnect, server restart, safe re-entry, invalid save rejection and desktop control.
 
-Presentation budget: at most one working day (8 engineering hours), including
-setup and verification. No extension without reporting what remains untested.
-Use one room/street, several moving actors, a doorway and one selectable modular
-piece. Compare 2D sprites, 3D with sprites, 3D with low-poly models; test first-
-and third-person where applicable. No production renderer or common render framework.
-Evaluate controls/readability, occlusion/doorways, camera/verticality,
-animation/equipment cost, placement, practical frame/memory samples and effort.
-Record unmeasured criteria honestly; no selection on unrun scenes.
+Use plain C# state, Godot ENet/RPC, small versioned JSON saves with atomic replace.
+No existing game saves/wire format exist; this introduces save/protocol version 1,
+rejecting incompatible versions rather than guessing. No new dependency/framework.
+Keep the disposable presentation lab intact; create a small game project separately.
+Bind localhost by default; no authentication, relay or public hosting work.
 
-If prerequisites block visual tests, preserve a minimal scaffold, document exact
-failures and verify independent offline work. Do not substitute another engine.
-Desktop tests require a verified QuestSim target window and inspected screenshots.
-Sibling helper discovery is read-only; all new files stay in QuestSim.
-
-After selection, refine Q01: CPU-only authority, two independent clients, shared
-presence/movement, persistent reconnect identity with absent disconnected actors,
-safe re-entry and world clock paused while empty. Do not implement camera-dependent
-controls yet. No factions, quests, scale, GPU, digging or general mod framework.
-
-Done: observed build/launch/comparison evidence or exact prerequisite blockers,
-accurate RUNBOOK/STATE, checkpoint and one next action. Stop at this boundary.
+Checkpoint domain/persistence first, then network/view, then acceptance evidence.
+No inventory gameplay, construction transactions, factions, quests, NPC population,
+scale or production art. Report exports/other hardware as untested if unavailable.
+Done: meaningful unit checks, real server/two-client checks and bounded GUI evidence,
+reproducible launch commands, accurate STATE and one next action. Stop at acceptance.
