@@ -1,0 +1,50 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+uint clampAxis(int v) { return uint(clamp(v, 0, int(p.worldMax))); }
+
+void main() {
+    uint a = gl_GlobalInvocationID.x;
+    if (a >= p.agents) return;
+    uint inf = info[a], kind = inf >> 31, mode = (inf >> 30) & 1u, faction = (inf >> 24) & 63u, anchor = inf & 0xFFFFFFu;
+    uint x = posX[a], y = posY[a], tx = tgtX[a], ty = tgtY[a];
+    uint step = kind == 1u ? p.stepZombie : p.stepHuman;
+    int dx = int(tx) - int(x), dy = int(ty) - int(y);
+    uint ax = uint(abs(dx)), ay = uint(abs(dy));
+    bool arrived = ax <= step && ay <= step;
+    if (arrived) { x = tx; y = ty; }
+    else {
+        uint s = 0u;
+        while ((max(ax, ay) >> s) >= 32768u) s++;
+        uint sx = ax >> s, sy = ay >> s, d = isqrt(sx * sx + sy * sy);
+        uint mx = sx * step / d, my = sy * step / d;
+        x = dx < 0 ? x - mx : x + mx;
+        y = dy < 0 ? y - my : y + my;
+    }
+    if (arrived) {
+        if (kind == 1u) {
+            // Horde attractor: a settlement chosen per horde and period.
+            uint target = hash4(p.seed, 9u, anchor, p.tick / p.hordePeriod) % p.settlements;
+            uint span = 2u * p.zombieSpread + 1u;
+            tx = clampAxis(int(settle[2u * target]) + int(hash4(p.seed, p.tick, a, 5u) % span) - int(p.zombieSpread));
+            ty = clampAxis(int(settle[2u * target + 1u]) + int(hash4(p.seed, p.tick, a, 6u) % span) - int(p.zombieSpread));
+        } else {
+            uint off = adjOff[anchor], count = adjOff[anchor + 1u] - off;
+            if (mode == 0u && count > 0u && hash4(p.seed, p.tick, a, 1u) < p.travelThreshold) {
+                anchor = adj[off + hash4(p.seed, p.tick, a, 2u) % count];
+                mode = 1u;
+                tx = settle[2u * anchor]; ty = settle[2u * anchor + 1u];
+            } else {
+                mode = 0u;
+                uint span = 2u * p.wanderRadius + 1u;
+                tx = clampAxis(int(settle[2u * anchor]) + int(hash4(p.seed, p.tick, a, 3u) % span) - int(p.wanderRadius));
+                ty = clampAxis(int(settle[2u * anchor + 1u]) + int(hash4(p.seed, p.tick, a, 4u) % span) - int(p.wanderRadius));
+            }
+        }
+    }
+    posX[a] = x; posY[a] = y; tgtX[a] = tx; tgtY[a] = ty;
+    info[a] = (kind << 31) | (mode << 30) | (faction << 24) | anchor;
+    uint region = min(x >> p.regionShift, p.regionsPerAxis - 1u) + min(y >> p.regionShift, p.regionsPerAxis - 1u) * p.regionsPerAxis;
+    atomicAdd(agg[faction * p.regionCount + region], 1u);
+}

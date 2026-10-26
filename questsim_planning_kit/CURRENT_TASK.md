@@ -1,6 +1,6 @@
 # Current task: E1 / population and rumor experiment
 
-Status: written 2026-10-25 for director approval; not started. Q02b is complete
+Status: approved 2026-10-26; in progress. Q02b is complete
 (Q02B_RESULTS.md). Experimental and disposable: measurements decide what is kept.
 Push verified checkpoints to origin/main occasionally; never force-push.
 
@@ -26,7 +26,9 @@ no networking). Separate from `src/`; nothing in the shipped game depends on it.
    (millimetres), kind (human/zombie), faction, home settlement, movement state, and a
    64-bit "heard" mask for active rumors. Humans: 3 factions; zombies: 2 horde factions.
    Humans travel roads or wander near home; hordes drift toward attractors.
-3. **Tick.** Integer-only movement, spatial binning into a uniform grid, contact within
+3. **Tick.** Game time runs at 48:1 (Valheim-like; one game day = 30 real minutes,
+   director 2026-10-26). A population tick defaults to 1 real second = 48 game seconds
+   (configurable), separate from the 20 Hz detailed authority tick. Integer-only movement, spatial binning into a uniform grid, contact within
    a radius. Each step reads the previous state and writes the next, so results never
    depend on thread order.
 4. **Facts and rumors.** The CPU owns a fact log (id, tick, place, kind, provenance) and a

@@ -1,0 +1,68 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+// Reads only the previous masks and writes the next ones, so thread order never matters.
+uint forget(uint a, uint bits, uint base) {
+    uint keep = bits;
+    for (uint m = bits; m != 0u; m &= m - 1u) {
+        uint r = base + uint(findLSB(m));
+        if (hash4(p.seed, p.tick, a, 0x800u + r) < p.fadeThreshold) keep &= ~(1u << (r - base));
+    }
+    return keep;
+}
+
+uint listen(uint a, uint b, uint candidates, uint base, uint trust) {
+    uint heard = 0u;
+    for (uint m = candidates; m != 0u; m &= m - 1u) {
+        uint r = base + uint(findLSB(m));
+        if (hash4(p.seed, p.tick, a, mix32(b) ^ (0x400u + r)) < rumor[r] * trust) heard |= 1u << (r - base);
+    }
+    return heard;
+}
+
+void record(uint a, uint heard, uint carriers, uint base) {
+    for (uint m = heard; m != 0u; m &= m - 1u) {
+        uint r = base + uint(findLSB(m));
+        uint index = atomicAdd(counters[0], 1u);
+        if (index < p.eventCapacity) { events[2u * index] = a; events[2u * index + 1u] = r; }
+        else atomicAdd(counters[1], 1u);
+        atomicAdd(counters[66u + r], 1u);
+    }
+    for (uint m = carriers; m != 0u; m &= m - 1u) atomicAdd(counters[2u + base + uint(findLSB(m))], 1u);
+}
+
+void main() {
+    uint a = gl_GlobalInvocationID.x;
+    if (a >= p.agents) return;
+    uint inf = info[a];
+    if ((inf >> 31) == 1u) { nextLo[a] = 0u; nextHi[a] = 0u; return; }
+    uint x = posX[a], y = posY[a], faction = (inf >> 24) & 7u;
+    uint oldLo = maskLo[a], oldHi = maskHi[a];
+    uint heardLo = 0u, heardHi = 0u;
+    for (uint i = 0u; i < p.seedCount; i++) {
+        uint sx = rumor[128u + 4u * i], sy = rumor[129u + 4u * i], radius = rumor[130u + 4u * i], slot = rumor[131u + 4u * i];
+        uint dx = uint(abs(int(x) - int(sx))) >> 8, dy = uint(abs(int(y) - int(sy))) >> 8;
+        if (dx <= radius && dy <= radius && dx * dx + dy * dy <= radius * radius) {
+            if (slot < 32u) heardLo |= 1u << slot; else heardHi |= 1u << (slot - 32u);
+        }
+    }
+    uint cx = x >> 16, cy = y >> 16, c2 = p.contactRadius * p.contactRadius;
+    for (int oy = -1; oy <= 1; oy++)
+    for (int ox = -1; ox <= 1; ox++) {
+        for (uint b = heads[cellOf(cx + uint(ox), cy + uint(oy))]; b != NONE; b = nextAgent[b]) {
+            uint binf = info[b];
+            if (b == a || (binf >> 31) == 1u) continue;
+            uint dx = uint(abs(int(posX[b]) - int(x))), dy = uint(abs(int(posY[b]) - int(y)));
+            if (dx > p.contactRadius || dy > p.contactRadius || dx * dx + dy * dy > c2) continue;
+            uint trust = rumor[64u + faction * 8u + ((binf >> 24) & 7u)];
+            heardLo |= listen(a, b, maskLo[b] & ~oldLo & p.activeLo, 0u, trust);
+            heardHi |= listen(a, b, maskHi[b] & ~oldHi & p.activeHi, 32u, trust);
+        }
+    }
+    heardLo &= ~oldLo; heardHi &= ~oldHi;
+    uint newLo = forget(a, oldLo, 0u) | heardLo, newHi = forget(a, oldHi, 32u) | heardHi;
+    nextLo[a] = newLo; nextHi[a] = newHi;
+    record(a, heardLo, newLo, 0u);
+    record(a, heardHi, newHi, 32u);
+}

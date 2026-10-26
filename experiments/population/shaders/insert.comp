@@ -1,0 +1,10 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+#include "common.glsl"
+
+// Per-cell linked lists. List order varies between runs; spread is order-independent.
+void main() {
+    uint a = gl_GlobalInvocationID.x;
+    if (a >= p.agents) return;
+    nextAgent[a] = atomicExchange(heads[cellHash(posX[a], posY[a])], a);
+}

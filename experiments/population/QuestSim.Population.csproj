@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Silk.NET.Vulkan" Version="2.23.0" />
+    <Shader Include="shaders/*.comp" />
+    <None Include="shaders/*.glsl" />
+  </ItemGroup>
+  <!-- GLSL compute kernels compiled to SPIR-V with glslc (Vulkan SDK / shaderc). -->
+  <Target Name="CompileShaders" BeforeTargets="Build" Inputs="@(Shader);shaders/common.glsl" Outputs="@(Shader->'$(OutDir)shaders/%(Filename).spv')">
+    <MakeDir Directories="$(OutDir)shaders" />
+    <Exec Command="glslc --target-env=vulkan1.2 -O &quot;%(Shader.FullPath)&quot; -o &quot;$(OutDir)shaders/%(Shader.Filename).spv&quot;" />
+  </Target>
+</Project>

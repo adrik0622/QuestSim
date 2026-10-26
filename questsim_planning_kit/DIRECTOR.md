@@ -85,6 +85,8 @@ platforms; macOS is a stretch goal (Mac players can try a compatibility layer su
 CrossOver; untested). Vulkan is the graphics/compute API for server GPU simulation, with
 kernels written as GLSL compute shaders. No Metal or D3D12-specific work is planned.
 
+**Game time (2026-10-26):** 48:1 (Valheim-like): one game day = 30 real minutes; a server setting, revisited in playtests.
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs
