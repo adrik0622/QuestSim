@@ -118,7 +118,7 @@ public sealed class WorldSave
 
 public sealed partial class WorldAuthority
 {
-    public const int ProtocolVersion = 4;
+    public const int ProtocolVersion = 5;   // 5: crowd packets carry velocities; NPC bodies (health 0) in snapshots
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;

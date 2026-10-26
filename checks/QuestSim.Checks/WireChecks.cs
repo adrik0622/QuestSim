@@ -25,7 +25,8 @@ public static class WireChecks
         var crowd = CrowdWire.Decode(w.CrowdPackets[2]);
         check(crowd.Length > 0 && crowd.All(f => !w.Npcs.ContainsKey(f.Index)) &&
               crowd.All(f => Math.Sqrt((f.X - a.X) * (f.X - a.X) + (f.Z - a.Z) * (f.Z - a.Z)) <= WorldAuthority.CrowdRadius + .1) &&
-              crowd.All(f => Math.Abs(Population.ToMetres(w.Pop!.PosX[f.Index]) - f.X) < 1.5 && Population.IsZombie(w.Pop.Info[f.Index]) == f.Zombie),
-            $"crowd placeholders carry nearby background people only, never ones already in detail ({crowd.Length} figures in {w.CrowdPackets[2].Length:N0} bytes)");
+              crowd.All(f => Math.Abs(Population.ToMetres(w.Pop!.PosX[f.Index]) - f.X) < 1.5 && Population.IsZombie(w.Pop.Info[f.Index]) == f.Zombie) &&
+              crowd.All(f => Math.Sqrt(f.Vx * f.Vx + f.Vz * f.Vz) <= (f.Zombie ? .5 : 1.3) + .03) && crowd.Count(f => f.Vx != 0 || f.Vz != 0) > crowd.Length / 4,
+            $"crowd placeholders carry nearby background people only, never ones already in detail, with their walking velocity ({crowd.Length} figures in {w.CrowdPackets[2].Length:N0} bytes)");
     }
 }

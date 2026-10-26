@@ -15,8 +15,8 @@ def me(f, label):
     return next(a for a in s['snapshot']['Actors'] if a['Id'] == s['ownId'])
 
 
-def npcs(f, label):
-    return [a for a in f.status(label)['snapshot']['Actors'] if a['Id'].startswith('npc:')]
+def npcs(f, label):   # living NPCs; bodies (health 0) lie around for a while
+    return [a for a in f.status(label)['snapshot']['Actors'] if a['Id'].startswith('npc:') and a['Health'] > 0]
 
 
 def run_combat():
@@ -45,7 +45,7 @@ def run_combat():
             if f.status('alice')['lastAttack']['Killed']: killed = f.status('alice')['lastAttack']['TargetId']
             time.sleep(.45)
         assert killed, results
-        wait(lambda: all(a['Id'] != killed for a in f.status('alice')['snapshot']['Actors']), 'dead NPC removed from snapshot')
+        wait(lambda: any(a['Id'] == killed and a['Health'] == 0 for a in f.status('alice')['snapshot']['Actors']), 'dead NPC lies as a body')
         passed(f'aimed pistol shots spend one round each and kill an NPC ({shots} shots: {", ".join(results)})')
         # Ask the nearest friendly NPC (already outside the starter room).
         def friendly():

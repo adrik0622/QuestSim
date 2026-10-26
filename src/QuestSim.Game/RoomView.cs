@@ -144,19 +144,26 @@ public partial class RoomView : Node3D
     }
 
     private string clock = "";
-    // Crowd placeholders: one batched mesh; figures glide toward their latest positions and hide when a real NPC shows them.
+    // Crowd placeholders: one batched mesh of low-poly silhouettes. Each figure walks on at the velocity of its last update
+    // (extrapolated up to 1.5 s) and eases out any correction; it hides when a real NPC shows that person.
     private MultiMeshInstance3D? crowd;
     private CrowdWire.Figure[] crowdFigures = [];
+    private double crowdAge;
     private readonly Dictionary<uint, Vector3> crowdShown = new();
+    // Hit feedback: NPC health drops float up as red numbers.
+    private readonly Dictionary<string, int> lastHealth = new();
+    private readonly List<(Label3D Label, double Age)> hits = new();
 
     public void UpdateCrowd(CrowdWire.Figure[] figures)
     {
         crowdFigures = figures;
+        crowdAge = 0;
         if (crowd is null)
         {
             crowd = new MultiMeshInstance3D
             {
-                Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = new BoxMesh { Size = new Vector3(.45f, 1.7f, .3f) } },
+                Multimesh = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true,
+                    Mesh = new CapsuleMesh { Radius = .22f, Height = 1.7f, RadialSegments = 8, Rings = 2 } },
                 MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 1 }
             };
             AddChild(crowd);
@@ -172,11 +179,12 @@ public partial class RoomView : Node3D
         var shown = crowdFigures.Where(f => !visible.Contains(f.Index)).ToArray();
         var multi = crowd.Multimesh;
         multi.InstanceCount = shown.Length;
-        float blend = 1 - Mathf.Exp(-3 * (float)delta);
+        crowdAge += delta;
+        float blend = 1 - Mathf.Exp(-8 * (float)delta), age = (float)Math.Min(crowdAge, 1.5);
         for (int i = 0; i < shown.Length; i++)
         {
             var f = shown[i];
-            var target = new Vector3((float)f.X, .85f, (float)f.Z);
+            var target = new Vector3((float)(f.X + f.Vx * age), .85f, (float)(f.Z + f.Vz * age));
             var at = crowdShown.TryGetValue(f.Index, out var p) ? p.Lerp(target, blend) : target;
             crowdShown[f.Index] = at;
             multi.SetInstanceTransform(i, new Transform3D(Basis.Identity, at));
@@ -226,10 +234,32 @@ public partial class RoomView : Node3D
         actors.Add(state.Id, actor);
         return actor;
     }
+    private void ShowHit(Node3D actor, int damage, bool killed)
+    {
+        var label = new Label3D { Text = killed ? $"-{damage} ✝" : $"-{damage}", Modulate = new Color(1, .25f, .2f), OutlineModulate = Colors.Black,
+            Position = actor.Position + new Vector3(0, 2.4f, 0), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 56, PixelSize = .005f, NoDepthTest = true };
+        AddChild(label);
+        hits.Add((label, 0));
+    }
+
+    private void DrawHits(double delta)
+    {
+        for (int i = hits.Count - 1; i >= 0; i--)
+        {
+            var (label, age) = hits[i];
+            age += delta;
+            if (age >= .9) { label.QueueFree(); hits.RemoveAt(i); continue; }
+            label.Position += new Vector3(0, (float)delta * 1.2f, 0);
+            label.Modulate = label.Modulate with { A = 1 - (float)(age / .9) };
+            hits[i] = (label, age);
+        }
+    }
+
     public void ClearActors()
     {
         foreach (var actor in actors.Values) actor.QueueFree();
         actors.Clear();
+        lastHealth.Clear();
     }
     public void UpdateWorld(WorldSnapshot? state, string ownId, string profile, string connection, Dictionary<string, int>? inventory, string itemMessage, double delta)
     {
@@ -237,7 +267,7 @@ public partial class RoomView : Node3D
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
             "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal | I inspect\n" +
-            $"Present: {state?.Actors.Length ?? 0} | {clock}" +
+            $"Present: {state?.Actors.Count(a => a.Kind == 0 || a.Health > 0) ?? 0} | {clock}" +
             string.Concat((state?.Factions ?? []).Where(f => f.Id < 3).Select(f => $" | {f.Name} {f.Standing:+0;-0}")) + "\n" +
             $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
             $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}" +
@@ -247,6 +277,7 @@ public partial class RoomView : Node3D
         if (state is null) return;
         ApplyTimeOfDay(state.Tick);
         DrawCrowd(delta);
+        DrawHits(delta);
         if (!roomBuilt) BuildRoom(state);
         UpdateCaches(state);
         // Blocks only appear (no demolition yet); draw any the server added since the last snapshot.
@@ -261,13 +292,21 @@ public partial class RoomView : Node3D
             ((StandardMaterial3D)box.MaterialOverride).AlbedoColor = supply.Count == 0 ? new Color(.3f, .35f, .3f) : panels ? new Color(.25f, .45f, .95f) : new Color(.2f, .8f, .3f);
             label.Text = $"{(panels ? "Panel" : "Bandage")} crate ({supply.Count})";
         }
-        foreach (string id in actors.Keys.Except(state.Actors.Select(a => a.Id)).ToArray()) { actors[id].QueueFree(); actors.Remove(id); }
+        foreach (string id in actors.Keys.Except(state.Actors.Select(a => a.Id)).ToArray()) { actors[id].QueueFree(); actors.Remove(id); lastHealth.Remove(id); }
         foreach (var a in state.Actors)
         {
-            bool local = a.Id == ownId;
-            if (!actors.TryGetValue(a.Id, out var actor)) actor = CreateActor(a, local);
-            actor.Position = actor.Position.Lerp(new Vector3((float)a.X, 0, (float)a.Z), 1 - Mathf.Exp(-15 * (float)delta));
-            actor.Rotation = new Vector3(0, (float)a.Heading, 0);
+            bool local = a.Id == ownId, body = a.Kind != 0 && a.Health == 0;
+            if (!actors.TryGetValue(a.Id, out var actor))
+            {
+                actor = CreateActor(a, local);
+                // A placeholder becoming a full NPC continues from where the silhouette stood.
+                if (a.Kind != 0 && crowdShown.TryGetValue(uint.Parse(a.Id.AsSpan(4)), out var ghost)) actor.Position = new Vector3(ghost.X, 0, ghost.Z);
+            }
+            if (a.Kind != 0 && lastHealth.TryGetValue(a.Id, out int before) && a.Health < before) ShowHit(actor, before - a.Health, body);
+            lastHealth[a.Id] = a.Health;
+            // The dead lie where they fell (on their back, slightly raised so the boxes clear the ground).
+            actor.Position = actor.Position.Lerp(new Vector3((float)a.X, body ? .2f : 0, (float)a.Z), 1 - Mathf.Exp(-15 * (float)delta));
+            actor.Rotation = new Vector3(body ? Mathf.Pi / 2 : 0, (float)a.Heading, 0);
             actor.Visible = !local || !firstPerson;
             if (!local) continue;
             StreamChunks(actor.Position);

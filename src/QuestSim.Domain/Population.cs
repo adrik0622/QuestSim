@@ -110,6 +110,17 @@ public sealed class Population
     }
 
     public static bool IsZombie(uint info) => (info & Zombie) != 0;
+
+    // At night, people who have made it home are indoors: never shown or promoted, and out of the zombies' reach.
+    // (Without this a whole district stood in a 40 m square all night.)
+    public bool Indoors(uint i) => IndoorsAt(i, Night(GameHour(Tick * (double)GameSecondsPerTick)));
+    bool IndoorsAt(uint i, bool night)
+    {
+        uint info = Info[i];
+        if (!night || (info & (Zombie | Travelling | Dead | Detailed)) != 0) return false;
+        uint anchor = info & 0xFFFFFF;
+        return Math.Max(Math.Abs((long)PosX[i] - settleX[anchor]), Math.Abs((long)PosZ[i] - settleZ[anchor])) <= NightRadius;
+    }
     public static int FactionOf(uint info) => (int)((info >> 24) & 15);
 
     // Rumor inputs decided by the authority (credibility 16-bit per slot, trust 16-bit per faction pair), and outputs it reads back.
@@ -209,6 +220,7 @@ public sealed class Population
 
     void Encounters(uint tick, OrderablePartitioner<Tuple<int, int>> partitions)
     {
+        bool night = Night(GameHour(tick * (double)GameSecondsPerTick));
         var dying = new ConcurrentBag<uint>();
         var bitten = new ConcurrentBag<(uint Human, uint Zombie)>();
         ulong r2 = (ulong)EncounterRadius * EncounterRadius;
@@ -223,7 +235,7 @@ public sealed class Population
                     for (int ox = -1; ox <= 1; ox++)
                         for (uint h = biteHeads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; h != None; h = biteNext[h])
                         {
-                            if ((Info[h] & Detailed) != 0) continue;
+                            if ((Info[h] & Detailed) != 0 || IndoorsAt(h, night)) continue;
                             long dx = (long)PosX[h] - PosX[z], dz = (long)PosZ[h] - PosZ[z];
                             if ((ulong)(dx * dx + dz * dz) > r2) continue;
                             if (Hash4((uint)Seed, tick, z, Mix(h) ^ 0xA00) < HumanLossThreshold) bitten.Add((h, z));

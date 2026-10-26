@@ -38,9 +38,20 @@ public static class LivingChecks
         Steps(w, WorldAuthority.PopulationEvery);
         var clear = new WorldAuthority(new WorldSave { Population = 20_000 }, synchronousPopulation: true);
         var cleo = clear.Join(2, new string('c', 32), "Cleo");
-        Steps(clear, WorldAuthority.PopulationEvery * 2);
-        check(clear.Npcs.Count > 0 && clear.Npcs.Values.All(n => Math.Sqrt((n.X - cleo.X) * (n.X - cleo.X) + (n.Z - cleo.Z) * (n.Z - cleo.Z)) >= 20),
-            $"by default nobody is promoted within 20 m of a player (no pop-in at arm's length; {clear.Npcs.Count} promoted farther out)");
+        Steps(clear, WorldAuthority.PopulationEvery);
+        double FromCleo(Npc n) => Math.Sqrt((n.X - cleo.X) * (n.X - cleo.X) + (n.Z - cleo.Z) * (n.Z - cleo.Z));
+        check(clear.Npcs.Count > 0 && clear.Npcs.Values.All(n => FromCleo(n) >= 20),
+            $"by default nobody unseen is promoted within 20 m of a player (no pop-in at arm's length; {clear.Npcs.Count} promoted farther out)");
+        int closeIn = 0;
+        bool onlyShown = true;
+        for (int k = 0; k < 5; k++)
+        {
+            var shown = CrowdWire.Decode(clear.CrowdPackets[2]).Select(f => f.Index).ToHashSet();
+            var had = clear.Npcs.Keys.ToHashSet();
+            Steps(clear, WorldAuthority.PopulationEvery);
+            foreach (var n in clear.Npcs.Values.Where(n => !had.Contains(n.Index) && FromCleo(n) < 20)) { closeIn++; onlyShown &= shown.Contains(n.Index); }
+        }
+        check(closeIn > 0 && onlyShown, $"only people already shown as placeholders become full NPCs inside 20 m ({closeIn} did, in place of their silhouettes)");
         check(w.Npcs.Count > 0 && w.Npcs.Values.All(n => Math.Sqrt((n.X - alice.X) * (n.X - alice.X) + (n.Z - alice.Z) * (n.Z - alice.Z)) <= WorldAuthority.PromoteRadius + 13) &&
               w.Npcs.Keys.All(i => (w.Pop.Info[i] & Population.Detailed) != 0),
             $"agents near a player are promoted to 20 Hz detail ({w.Npcs.Count} near the plaza)");
@@ -82,7 +93,10 @@ public static class LivingChecks
         check(w.Attack(2, "melee").Reason is "cooldown" or "miss", "melee respects its cooldown");
         Steps(w, WorldAuthority.PopulationEvery);
         check(!w.Npcs.ContainsKey(zombie.Index) && (w.Pop.Info[zombie.Index] & Population.Dead) != 0 &&
-              w.Snapshot(2).Actors.All(a => a.Id != $"npc:{zombie.Index}"), "the dead agent leaves detail and stays dead in the coarse population");
+              w.Snapshot(2).Actors.Single(a => a.Id == $"npc:{zombie.Index}").Health == 0,
+            "the dead agent leaves detail and stays dead in the coarse population; its body stays visible (health 0)");
+        Steps(w, (int)(WorldAuthority.BodySeconds * WorldAuthority.TickRate) + WorldAuthority.PopulationEvery);
+        check(w.Snapshot(2).Actors.All(a => a.Id != $"npc:{zombie.Index}"), $"bodies are cleared after {WorldAuthority.BodySeconds} s");
 
         var human = Summon(w, false, alice.X + 8, alice.Z, faction: 0);
         human.Wandering = true; human.WanderX = human.X; human.WanderZ = human.Z;

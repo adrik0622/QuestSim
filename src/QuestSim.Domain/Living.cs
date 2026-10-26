@@ -25,8 +25,13 @@ public sealed partial class WorldAuthority
     public IReadOnlyDictionary<uint, Npc> Npcs => npcs;
     public long PopulationLagged { get; private set; }
     public Action<CharacterRecord, Npc>? Downed;
-    public const double CrowdRadius = 200;
-    public const int CrowdLimit = 1500;
+    public const double CrowdRadius = 200, BodySeconds = 90;
+    public const int CrowdLimit = 1500, MaxBodies = 200;
+    // The dead stay where they fell for a while (shown with health 0), outside the detail budget; not saved.
+    readonly Dictionary<uint, (Npc Npc, long Until)> bodies = new();
+    // Agents each peer was last shown as crowd placeholders: they may become full NPCs inside the promotion clearance,
+    // since turning a visible figure into a person in place is not pop-in.
+    readonly Dictionary<int, HashSet<uint>> crowdShown = new();
     // Latest crowd placeholder packet per peer, built between coarse ticks; CrowdVersion changes when they refresh.
     public Dictionary<int, byte[]> CrowdPackets { get; } = new();
     public long CrowdVersion { get; private set; }
@@ -80,10 +85,15 @@ public sealed partial class WorldAuthority
             {
                 pop.Info[i] &= ~Population.Detailed;
                 npcs.Remove(i);
+                if (npc.Dead) bodies[i] = (npc, State.Tick + (long)(BodySeconds * TickRate));
             }
         }
+        foreach (var (i, body) in bodies.ToArray())
+            if (State.Tick >= body.Until || players.All(p => Distance(p.X, p.Z, body.Npc.X, body.Npc.Z) > DemoteRadius)) bodies.Remove(i);
+        foreach (var i in bodies.OrderBy(b => b.Value.Until).ThenBy(b => b.Key).Take(Math.Max(0, bodies.Count - MaxBodies)).Select(b => b.Key).ToArray())
+            bodies.Remove(i);
         // Share the detail budget fairly: take each player's nearest candidates in turn.
-        var queues = players.Select(p => new Queue<uint>(pop.Near(p.X, p.Z, PromoteRadius)
+        var queues = players.Select(p => new Queue<uint>(pop.Near(p.X, p.Z, PromoteRadius).Where(i => !pop.Indoors(i))
             .OrderBy(i => Distance(p.X, p.Z, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]))).ThenBy(i => i))).ToArray();
         while (npcs.Count < MaxDetailed && queues.Any(q => q.Count > 0))
             foreach (var queue in queues)
@@ -92,7 +102,8 @@ public sealed partial class WorldAuthority
                 if ((pop.Info[i] & (Population.Detailed | Population.Dead)) != 0) continue;
                 double x = Population.ToMetres(pop.PosX[i]), z = Population.ToMetres(pop.PosZ[i]);
                 if (!FindWalkable(ref x, ref z)) continue;   // coarse agents ignore buildings; step out of one or stay coarse
-                if (PromotionClearance > 0 && players.Any(p => Distance(p.X, p.Z, x, z) < PromotionClearance)) continue;
+                if (PromotionClearance > 0 && active.Any(p => Distance(p.Value.X, p.Value.Z, x, z) < PromotionClearance &&
+                    !(crowdShown.TryGetValue(p.Key, out var shown) && shown.Contains(i)))) continue;
                 var delta = State.AgentDeltas.FirstOrDefault(d => d.Index == i);
                 npcs[i] = new Npc
                 {
@@ -107,14 +118,25 @@ public sealed partial class WorldAuthority
     {
         var pop = Pop!;
         CrowdPackets.Clear();
+        crowdShown.Clear();
         foreach (var (peer, c) in active)
         {
-            var figures = pop.Near(c.X, c.Z, CrowdRadius).Where(i => (pop.Info[i] & Population.Detailed) == 0)
-                .Select(i => new CrowdWire.Figure(i, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]), Population.IsZombie(pop.Info[i]), Population.FactionOf(pop.Info[i])))
+            var figures = pop.Near(c.X, c.Z, CrowdRadius).Where(i => (pop.Info[i] & Population.Detailed) == 0 && !pop.Indoors(i))
+                .Select(i => Figure(pop, i))
                 .OrderBy(f => (f.X - c.X) * (f.X - c.X) + (f.Z - c.Z) * (f.Z - c.Z)).ThenBy(f => f.Index).Take(CrowdLimit).ToArray();
             CrowdPackets[peer] = CrowdWire.Encode(c.X, c.Z, figures);
+            crowdShown[peer] = figures.Select(f => f.Index).ToHashSet();
         }
         CrowdVersion++;
+    }
+
+    // A placeholder walks toward its coarse target at its real-time speed until the next update (clients extrapolate).
+    static CrowdWire.Figure Figure(Population pop, uint i)
+    {
+        bool zombie = Population.IsZombie(pop.Info[i]);
+        double dx = ((double)pop.TgtX[i] - pop.PosX[i]) / 1000, dz = ((double)pop.TgtZ[i] - pop.PosZ[i]) / 1000, d = Math.Sqrt(dx * dx + dz * dz);
+        double speed = Math.Min(d, (zombie ? Population.StepZombie : Population.StepHuman) / 1000.0), scale = d > 1e-6 ? speed / d : 0;
+        return new CrowdWire.Figure(i, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]), zombie, Population.FactionOf(pop.Info[i]), dx * scale, dz * scale);
     }
 
     bool FindWalkable(ref double x, ref double z)
@@ -232,8 +254,9 @@ public sealed partial class WorldAuthority
         Defeat(player, attacker);
     }
 
+    // The dead (health 0) are included: bodies lie where they fell for BodySeconds.
     IEnumerable<ActorState> NpcsVisibleTo(CharacterRecord? viewer, bool all) =>
-        npcs.Values.Where(n => !n.Dead && (all || viewer is not null && Distance(viewer.X, viewer.Z, n.X, n.Z) <= ViewRadius))
+        npcs.Values.Concat(bodies.Values.Select(b => b.Npc)).Where(n => all || viewer is not null && Distance(viewer.X, viewer.Z, n.X, n.Z) <= ViewRadius)
             .OrderBy(n => n.Index)
             .Select(n => new ActorState($"npc:{n.Index}", DisplayName(n), n.X, n.Z, n.Heading, n.Zombie ? 2 : 1, n.Faction, n.Health));
 

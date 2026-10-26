@@ -98,6 +98,18 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
   agents within 200 m (9 bytes each: ID, relative position, kind/faction; ~13 KB/s per player
   measured with 8 players); clients draw them as simple figures that glide between updates
   and hide when the same person is shown in detail.
+- Second pass (after the playtest): placeholders are low-poly silhouettes that walk on at their
+  real speed between updates (velocity in the packet, 11 bytes each, protocol 5); people already
+  shown as placeholders may become full NPCs inside 20 m, starting where the silhouette stood;
+  at night people who reached home are indoors (not shown, promoted or bitten), which fixed a
+  whole district standing in a 40 m square all night; dead NPCs lie where they fell for 90 s
+  (outside the detail budget, not saved); damage floats up as red numbers.
+
+### F18 - Deeper danger: zones with more or less violence (idea, director 2026-10-26)
+Instead of tuning one global fight rate, procedurally give districts a character: some are
+safer, some are lawless (crime, Choir activity, horde routes). Fight and encounter odds,
+patrols and rumors would follow the zone, so where you are matters. Not designed yet; the
+current NPC-vs-NPC fight rate stays as it is until then.
 
 ### Not in v1.0
 Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS, code mods (data-only for now; stay mindful of a later transition).

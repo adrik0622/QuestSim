@@ -61,6 +61,11 @@ public static class CityChecks
         while (!Population.Night(Population.GameHour(pop.Tick * 48.0)) || Population.GameHour(pop.Tick * 48.0) < 23.5) pop.Step();
         double night = MeanHomeDistance();
         check(night < day * .6, $"humans head home at night: mean distance from home {day:0} m at 14:00, {night:0} m at 23:30");
+        int indoors = Enumerable.Range(0, pop.Count).Count(i => pop.Indoors((uint)i)), humansAlive = Enumerable.Range(0, pop.Count)
+            .Count(i => !Population.IsZombie(pop.Info[i]) && (pop.Info[i] & Population.Dead) == 0);
+        while (Population.Night(Population.GameHour(pop.Tick * 48.0))) pop.Step();
+        check(indoors > humansAlive / 2 && Enumerable.Range(0, pop.Count).All(i => !pop.Indoors((uint)i)),
+            $"at night people who reached home are indoors ({indoors:N0} of {humansAlive:N0} humans at 23:30), and nobody is by day");
 
         var hunted = new Population(gen, 60_000);
         long humans = hunted.TargetHumans, zombies = hunted.TargetZombies, lostHumans = 0, lostZombies = 0;

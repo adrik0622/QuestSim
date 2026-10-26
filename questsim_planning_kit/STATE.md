@@ -31,7 +31,7 @@ Implemented on `nightly` (each step checked, committed and pushed):
   territories), background attrition with `attack` rumors, NPC inspector (I), Shift sprint,
   camera collision, fair detail budget, `--populate=N` for existing worlds.
 
-Save/protocol v4, content `questsim:city-v1`; v1–v3 saves migrate with byte-exact backups.
+Save v4, protocol 5 (crowd velocities, NPC bodies), content `questsim:city-v1`; v1–v3 saves migrate with byte-exact backups.
 
 Verified: 120 domain checks (final count; see NIGHTLY log for per-step numbers); verify_build 11, verify_items 12, verify_multiplayer 12,
 verify_save_failures 4, verify_defeat 3, verify_living 6 (1M agents hold 20 ticks/s with
@@ -64,5 +64,14 @@ cells for 5 m / 30 m searches. Grids now sized to each radius, contact grid laid
 0.12 s / 0.41 s there, 0.07 s / 0.08 s on the 5950X; state bit-identical to before (fingerprint).
 (3) Test scripts made cross-platform (process suspend, GPU-handle check, Python name, LF endings).
 
-Next action: director playtests again (flicker, pop-in, placeholders); then choose the next
-task, e.g. F15 extensive building, or a graphical Windows client playtest on whitetop.
+2026-10-26 (second playtest feedback): chasers that "vanished and became someone else" had been
+killed by other NPCs (5 of 5 disappearances in a replay of a copy of the play world matched
+recorded clash deaths) and were removed instantly. Now: bodies lie for 90 s, red damage numbers,
+silhouette placeholders walk smoothly (velocity in crowd packets, protocol 5), shown placeholders
+may become full NPCs inside 20 m, and people who reached home at night are indoors (the "lots
+of ghosts" was a whole district standing in a 40 m square at night). 127 domain checks;
+test_all green on Linux (incl. Xvfb screens) and on whitetop. Fight rate unchanged; zones with
+more or less violence recorded as F18.
+
+Next action: director playtests again (bodies, night streets, placeholders); then choose the
+next task, e.g. F15 extensive building, F18 danger zones, or a graphical Windows playtest.
