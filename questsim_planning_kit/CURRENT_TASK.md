@@ -15,10 +15,11 @@ end, and does a GPU path stay off the authoritative tick despite readback latenc
 A headless console experiment in `experiments/population/` (plain C#, no Godot game,
 no networking). Separate from `src/`; nothing in the shipped game depends on it.
 
-0. **GPU backend spike (≤1 day).** Get one integer compute kernel running headless on
-   this machine and pick a backend: Godot RenderingDevice under `--headless`, ILGPU,
-   or Vulkan compute via Silk.NET. Criteria: headless works, 32/64-bit integer ops,
-   plausible Windows/macOS path, effort. Record the choice and the evidence.
+0. **Vulkan backend spike (≤1 day).** Vulkan is the chosen API (Windows/Linux; macOS a
+   stretch goal). Kernels are GLSL compute shaders using 32-bit integers only (two u32
+   for the 64-bit rumor mask). Try Godot RenderingDevice on a server without a window
+   first; if it cannot create a Vulkan device headless, use Vulkan directly via
+   Silk.NET with the same GLSL. Record the evidence and the choice.
 1. **World.** Seeded rudimentary generation: settlements on a 2D plane joined by a
    road graph. Pinned PRNG algorithm (implemented in code) plus a generator version.
 2. **Agents as arrays.** One slot per agent, never reused: fixed-point uint32 X/Y

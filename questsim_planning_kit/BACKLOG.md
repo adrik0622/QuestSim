@@ -19,7 +19,7 @@ Standalone exports, other platforms and 2–8 load coverage remain explicit futu
 - Owner: integration/platform agent. Dependency: Q00. Timebox: 3-5 days.
 - Outcome after presentation selection: a tiny shared space runs as two independent clients and a Godot CPU-only headless server. Synchronize presence/movement; persist identity/inventory/progression on reconnect, remove disconnected actors, validate safe re-entry, and pause the simulation clock while empty.
 - Implementation: Godot .NET project, plain C# world records, native existing transport, stable actor IDs. No custom protocol transport.
-- Acceptance: exported Windows/Linux/macOS clients launch on real machines where available; two connect to a server. Mark missing hardware coverage honestly.
+- Acceptance: exported Windows/Linux clients launch on real machines (macOS is a stretch goal); two connect to a server. Mark missing hardware coverage honestly.
 - Measure: startup, basic tick/frame time and memory with build versions.
 - Exclude: authentication service, server browser, relay system, GPU server.
 - Stop/reduce: resolve a blocking platform dependency before expanding features.
@@ -119,12 +119,12 @@ build placement and network-condition experiments remain separate bounded tasks.
 ## X02 - Optional GPU operation
 
 - Owner: compute agent. Dependency: an equivalent CPU reference operation (a prior CPU bottleneck is no longer required; director 2026-10-25). Timebox: 5-10 days; deployment may require a separate 3-5 day spike.
-- Outcome: determine whether one homogeneous operation benefits from portable compute.
+- Outcome: determine whether one homogeneous operation benefits from Vulkan compute (Windows/Linux).
 - Implementation: Godot compute/storage buffers or field texture. Numeric formats, explicit IDs and synchronization. CPU authority validates/commits required outputs.
 - Compare: 10k/100k/1M benchmark records, density and output size; upload + dispatch + synchronization + readback + integration, not just kernel time. Include graphics contention and required network/save work.
 - Acceptance: provisional 2x end-to-end operation improvement and material total-tick gain (suggested 20%) at actual intended workload, correct invariants, required-platform evidence and usable CPU route.
 - Hosting: ordinary Godot --headless disables rendering. Prove actual offscreen/device initialization before claiming GPU server support.
-- Exclude: CUDA as required portable foundation, GPU script compiler, client authority, multi-GPU.
+- Exclude: CUDA as required foundation, Metal/D3D12-specific paths, GPU script compiler, client authority, multi-GPU.
 - Stop: retain CPU if transfer/deployment/compatibility erases the gain.
 
 ## X03 - Optional voxel branch

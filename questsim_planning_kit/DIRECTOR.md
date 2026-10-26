@@ -80,7 +80,12 @@ Three candidate test stories:
 2. Barricading a route changes travel, delivery timing and where a horde encounters survivors.
 3. Helping a rival faction changes resources and relationships, opening one alliance while closing another.
 
-**Story-time invention is allowed and a preferred approach to explore (2026-10-25).** As in the OnceLost devlog (VIDEO_REVIEW.md), when an opportunity is told the story director may create the items, creatures, locations and events it needs (a merchant's lost cart, rum, gold, wolves), shaped by facts already in the world (bears passed through, so wolf corpses instead of wolves) and materialized lazily when someone arrives. Once created, that content is committed shared state: the same for every player, persisted, and subject to the usual exactly-once rules. Faction responses can mix existing members/resources with story-time creation; which balance feels best is an experiment. **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
+**Story-time invention is allowed and a preferred approach to explore (2026-10-25).** As in the OnceLost devlog (VIDEO_REVIEW.md), when an opportunity is told the story director may create the items, creatures, locations and events it needs (a merchant's lost cart, rum, gold, wolves), shaped by facts already in the world (bears passed through, so wolf corpses instead of wolves) and materialized lazily when someone arrives. Once created, that content is committed shared state: the same for every player, persisted, and subject to the usual exactly-once rules. Faction responses can mix existing members/resources with story-time creation; which balance feels best is an experiment. **Platforms and graphics API (2026-10-26):** Windows and Linux are the target
+platforms; macOS is a stretch goal (Mac players can try a compatibility layer such as
+CrossOver; untested). Vulkan is the graphics/compute API for server GPU simulation, with
+kernels written as GLSL compute shaders. No Metal or D3D12-specific work is planned.
+
+**Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs
 
@@ -106,7 +111,7 @@ Judge whether the result creates an interesting choice, remains understandable, 
 - After the first two-week attempt: is the shared authority loop reliable enough to build on?
 - At 6-10 weeks: are persistence, independent activity and a basic consequence loop credible? Revise scope before investing further.
 - At the integrated slice: do human playtests justify more content and scale?
-- Before adopting GPU or voxels: did the whole integrated workload improve or become uniquely possible, with acceptable portability and maintenance?
+- Before adopting GPU or voxels: did the whole integrated workload improve or become uniquely possible, with acceptable Windows/Linux portability and maintenance?
 
 For an experienced solo developer at full-time capacity, a bounded slice is a provisional 5-10 month project including contingency. A skilled 2-3 engineer team might reach comparable scope in 3-6 months. These are planning judgments; they exclude a finished commercial game. AI assistance does not eliminate integration and playtesting. Re-estimate from observed throughput.
 

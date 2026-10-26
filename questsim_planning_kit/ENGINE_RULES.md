@@ -4,7 +4,7 @@ Apply to all agents working on this project, including delegated agents. Directo
 
 ## Outcome
 
-Build a small, portable, moddable multiplayer zombie game that proves a living world. Human and zombie identities persist. NPCs and players use the same world rules. Factions act independently. Story opportunities arise from real state and history. Construction, persistence and multiplayer authority are integrated from the beginning.
+Build a small, moddable multiplayer zombie game for Windows and Linux (macOS a stretch goal) that proves a living world. Human and zombie identities persist. NPCs and players use the same world rules. Factions act independently. Story opportunities arise from real state and history. Construction, persistence and multiplayer authority are integrated from the beginning.
 
 ## YAGNI and simple solutions
 

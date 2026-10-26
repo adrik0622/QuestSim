@@ -84,4 +84,4 @@ Core invariants (see ENGINE_RULES.md "World invariants"):
 - Versioning: save schema 3, wire `ProtocolVersion` 3, content ID `questsim:q02b-room-v1`. Unknown/incomplete
   saves fail closed. Changing IDs, saves or messages requires stating compatibility and backing up saves before
   migration (v1/v2 saves get a byte-exact `.v1-`/`.v2-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3). Protocol changes require rebuilding server and all clients.
-- Supported only: local Linux, loopback, two clients. Exports, LAN/WAN, 2–8 load and power-loss durability are unverified.
+- Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: local Linux, loopback, two clients. Exports, LAN/WAN, 2–8 load and power-loss durability are unverified.
