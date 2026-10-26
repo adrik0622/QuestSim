@@ -141,6 +141,24 @@ the settlements whose loss hurts most (a faction's crucial farms, workshops and 
 crippling one ripples through logistics and trade to every faction that depended on it, and in
 time to the players (prices, scarcity, rumors; player trading arrives with F23).
 
+**v1.0 scope (director, 2026-10-26, later; supersedes the narrower reading above):** v1.0 is the
+base engine and world simulation. It must show that the world carries on without player
+intervention, that players can intervene if they choose, and that the world reacts to them.
+The Virtual Game Master takes a big role in that reaction. Locked in for v1.0 (simple, but
+with the framework set): placeholder weapons (baseball bat, handgun, M4), UI, a more natural
+way to play, deeper interaction with NPCs, and NPCs saying different things at different
+times. Under discussion for v1.0: richer procedural map generation, proper navmeshes for
+simulated NPCs, multi-story houses (stretch: keep people on ground floors), and whether a
+small LLM could fill NPC response templates. Agreed: the rest of the road to v1.0 in
+HANDOFF_2026-10-26.md. Tuning defaults wait for polishing passes.
+- **Hosting:** both dedicated servers and player-hosted games from the client; Steam
+  integration (Steam networking/connections) is a stretch goal.
+- **Captives:** no placeholder needed yet; idea: captured players are taken to a faction
+  compound (ties to F22 headquarters).
+- **Friendly fire:** on by default, with a server option to turn it off.
+- **Mod trust:** data-only mods for now, deliberately low trust: we must never let an attacker
+  use the game to deliver malware.
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs
