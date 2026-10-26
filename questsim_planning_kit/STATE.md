@@ -25,9 +25,15 @@ Implemented on `nightly` (each step checked, committed and pushed):
   ~68 KiB/s per client on loopback.
 - `--populate=N` gives an existing (migrated) world a population; tested on a copy of the play save.
 
+- Later in the run: day/night at 48:1 (people head home at night; lighting follows the
+  clock), turned players roam as named zombies carrying their gear ("put them to rest"),
+  NPC factions fight each other (zombies vs humans, the Choir vs everyone, rival hordes with
+  territories), background attrition with `attack` rumors, NPC inspector (I), Shift sprint,
+  camera collision, fair detail budget, `--populate=N` for existing worlds.
+
 Save/protocol v4, content `questsim:city-v1`; v1–v3 saves migrate with byte-exact backups.
 
-Verified: 110 domain checks; verify_build 11, verify_items 12, verify_multiplayer 12,
+Verified: 120 domain checks (final count; see NIGHTLY log for per-step numbers); verify_build 11, verify_items 12, verify_multiplayer 12,
 verify_save_failures 4, verify_defeat 3, verify_living 6 (1M agents hold 20 ticks/s with
 background snapshots), verify_content 2, Xvfb screens (verify_build_screen 5, city screen);
 E1 population checks 12; GitHub Actions green on ubuntu and windows.
