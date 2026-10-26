@@ -1,0 +1,36 @@
+# Domain checks on Linux and Windows, plus the population experiment's CPU reference checks.
+# No GPU or Godot on hosted runners: game/ENet/screen suites stay local (see RUNBOOK.md).
+name: checks
+on:
+  push:
+    branches: [main, nightly]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  domain:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Domain checks
+        shell: bash
+        run: bash scripts/check.sh
+
+  population-cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install glslc (kernels must still compile)
+        run: sudo apt-get update && sudo apt-get install -y glslc
+      - name: Population checks (CPU reference only)
+        run: bash scripts/run_population.sh check --backend cpu
