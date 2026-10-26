@@ -236,6 +236,24 @@ bash scripts/test_all.sh --all      # also the 8-player / 1M-agent load test
 Logs go to `.artifacts/logs/test_all/<timestamp>/`; steps whose tools are missing (Xvfb, Vulkan)
 are reported as SKIP. The GitHub Actions workflow is manual-only (Actions tab → checks → Run).
 
+## Windows test machine (2026-10-26)
+
+`ssh kings@whitetop` (192.168.1.119, entry in `~/.ssh/config`): Windows 11 Home, Ryzen 5 2600,
+32 GB, Radeon RX 5700 (AMD Vulkan 1.3). A sandbox: the account has admin rights and tools may be
+installed. Native OpenSSH with **Git Bash as the default shell** (`HKLM\SOFTWARE\OpenSSH\DefaultShell`),
+so the repo's bash scripts run unchanged. Installed with winget: Git 2.56, Python 3.12 (`python`;
+`python3` is the Store stub), .NET SDK 10.0.110, Vulkan SDK 1.4.363 (`glslc`); Pillow via pip.
+Firewall allows UDP 27840 inbound for LAN play.
+
+The clone at `~/Projects/QuestSim` was made from a `git bundle` (no GitHub credentials there).
+`.gitattributes` keeps `*.sh` LF; Git for Windows defaults to `core.autocrlf=true`, which breaks
+bash scripts. Update it by pulling a bundle, or mirror uncommitted work with
+`git diff HEAD --binary | ssh kings@whitetop 'cd ~/Projects/QuestSim && git apply'`.
+`bash scripts/install_godot.sh` fetches the pinned Windows build there. The Python tests launch
+`Godot_..._win64.exe` directly (its stdout redirects fine), so kill/suspend reach the real
+process; `run_server.sh`/`run_client.sh` use the `_console.exe` wrapper for terminals.
+Graphical tests need a logged-in desktop session; none have been run yet.
+
 ## Nightly v1.0 foundation (merged into main 2026-10-26)
 
 Same build and launch commands. New server options: `--population=N` (new worlds; default

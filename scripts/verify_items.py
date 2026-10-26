@@ -2,12 +2,11 @@
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
-import signal
 from pathlib import Path
 import threading
 import time
 import uuid
-from verify_multiplayer import NetworkFixture, wait, read, atomic
+from verify_multiplayer import NetworkFixture, wait, read, atomic, pause
 
 ITEM = 'questsim:bandage'
 CRATE = 'questsim:starter-crate'  # F would choose the nearest stocked crate; item tests target bandages.
@@ -111,13 +110,13 @@ def run_recovery(fail_save):
             obstruction=Path(str(f.save)+'.tmp'); obstruction.mkdir()
         else:
             # Stop server first: the client cannot possibly receive a reply yet.
-            f.processes['server'][0].send_signal(signal.SIGSTOP)
+            pause(f.processes['server'][0])
         f.command('alice',pickupRequestId=request,containerId=CRATE)
         if not fail_save:
             wait(lambda: json.loads((f.profiles/'alice.json').read_text()).get('LastPickupRequestId')==request, 'pending request durable')
             time.sleep(.2)  # Let the client flush the reliable packet while server is stopped.
-            f.processes['alice'][0].send_signal(signal.SIGSTOP)
-            f.processes['server'][0].send_signal(signal.SIGCONT)
+            pause(f.processes['alice'][0])
+            pause(f.processes['server'][0], resume=True)
         if fail_save:
             assert f.processes['server'][0].wait(timeout=8)==1
             wait(lambda: f.status('alice')['snapshot'] is None,'failed-save server disconnected')

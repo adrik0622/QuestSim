@@ -278,7 +278,7 @@ The order and scope are revisited after each experiment.
 
 ## Getting started
 
-Development and testing so far happen on **Linux**. Windows is a target platform but hasn't been tested yet.
+Development happens on **Linux**; the full test suite also runs natively on **Windows 11** (Git Bash).
 
 **Requirements:** .NET SDK 10.0.110 (pinned in `global.json`) and Python 3. For the GPU experiment you
 also need a Vulkan driver and `glslc` (from the Vulkan SDK or shaderc). Godot is downloaded locally by
@@ -366,8 +366,9 @@ The [runbook](questsim_planning_kit/RUNBOOK.md) lists every command, with expect
 
 - **Targets:** Windows and Linux. macOS is a stretch goal; Mac players could try a compatibility layer
   such as CrossOver, which hasn't been tested.
-- **Verified so far:** local Linux, loopback networking and two clients. Exported builds, LAN/WAN and
-  2-8 player loads haven't been tested yet.
+- **Verified so far:** Linux and Windows 11 (all automated suites; the Windows GPU run was on a Radeon RX 5700),
+  2–8 players on loopback, and a Linux client playing on a Windows server over a LAN. Exported builds, WAN
+  and a graphical Windows client haven't been tested yet.
 - **Game world (nightly):** one million agents by default (`--population=N`), which the server's CPU
   path handles at 20 ticks per second; population snapshots save in the background every 60 seconds.
 - **Simulation experiment:** about 10 million agents at one population tick per second on an RTX 3080 Ti. Going

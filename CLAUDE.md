@@ -39,6 +39,9 @@ bash scripts/run_client.sh alice [--host=...] [--port=N]          # each client 
 
 Testing is local-first (director 2026-10-26): `bash scripts/test_all.sh` runs everything with a summary
 (`--quick` for domain + core ENet suites, `--all` adds the 8-player load test). The GitHub workflow is manual-only.
+A Windows test machine is reachable as `ssh kings@whitetop` (Git Bash shell, repo at `~/Projects/QuestSim`, sandbox:
+admin rights, safe to install tools); see RUNBOOK "Windows test machine". Test scripts must stay cross-platform
+(`pause()`/`gpu_handles()` in verify_multiplayer.py, no POSIX signals, `python` vs `python3`).
 
 Acceptance/regression suites (real server/client processes over ENet; headless unless noted):
 
@@ -98,4 +101,5 @@ Core invariants (see ENGINE_RULES.md "World invariants"):
 - Versioning: save schema 4, wire `ProtocolVersion` 4, content ID `questsim:city-v1`. Unknown/incomplete
   saves fail closed. Changing IDs, saves or messages requires stating compatibility and backing up saves before
   migration (v1–v3 saves get a byte-exact `.v<n>-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3→v4). Protocol changes require rebuilding server and all clients.
-- Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: local Linux, loopback, two clients. Exports, LAN/WAN, 2–8 load and power-loss durability are unverified.
+- Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: Linux and native Windows 11 (whitetop, RX 5700; full `test_all.sh --all` minus Xvfb screens), loopback 2–8 players,
+  one Linux client against a Windows server over LAN. Exports, WAN, a graphical Windows client and power-loss durability are unverified.

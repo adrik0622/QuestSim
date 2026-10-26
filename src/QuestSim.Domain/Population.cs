@@ -24,7 +24,15 @@ public sealed class Population
     public const uint StepHuman = 1300, StepZombie = 500, WanderRadius = 250_000, HordeSpread = 300_000, HordePeriod = 1200;
     public static readonly string[] FactionNames = ["Survivors' Union", "Free Traders", "The Hollow Choir", "Shambling Mass", "The Pale Tide"];
     public readonly uint[] PosX, PosZ, TgtX, TgtZ, Info, MaskLo, MaskHi;
-    readonly uint[] heads, next, nextLo, nextHi, humanHeads, humanNext;   // all living agents / living humans only
+    readonly uint[] heads, next, nextLo, nextHi, biteHeads, biteNext, contactStart, contactFill, contactCell;
+    // Three grids, each with cells at least its search radius so a 3×3 block finds every pair: all living agents in
+    // 65.5 m cells (Near), living humans in 32.8 m cells (rumor contact, 30 m) and in 8.2 m cells (zombie encounters, 5 m).
+    // Cells sized to the radius keep the scans from wading through ~500 non-neighbours per hit, which is what made a
+    // 1M-agent tick take seconds on CPUs with smaller caches. The contact grid is the hottest scan, so its humans are
+    // also laid out contiguously per cell (counting sort) with the fields the scan reads copied alongside.
+    struct Contact { public uint Agent, X, Z, Info, Lo, Hi; }
+    readonly Contact[] contacts;
+    const int NearShift = 16, ContactShift = 15, BiteShift = 13;
     public uint TableMask { get; }
     public int Count { get; }
     public ulong Seed { get; }
@@ -58,7 +66,8 @@ public sealed class Population
         PosX = new uint[count]; PosZ = new uint[count]; TgtX = new uint[count]; TgtZ = new uint[count]; Info = new uint[count];
         MaskLo = new uint[count]; MaskHi = new uint[count]; next = new uint[count]; nextLo = new uint[count]; nextHi = new uint[count];
         TableMask = (uint)BitOperations.RoundUpToPowerOf2((ulong)Math.Max(1024, count * 2)) - 1;
-        heads = new uint[TableMask + 1L]; humanHeads = new uint[TableMask + 1L]; humanNext = new uint[count];
+        heads = new uint[TableMask + 1L]; biteHeads = new uint[TableMask + 1L]; biteNext = new uint[count];
+        contactStart = new uint[TableMask + 2L]; contactFill = new uint[TableMask + 1L]; contactCell = new uint[count]; contacts = new Contact[count];
         uint hordes = (uint)Math.Max(2, count * (1 - humanFraction) / 5000);
         Hordes = hordes;
         towns = city.Towns.Count;
@@ -122,6 +131,15 @@ public sealed class Population
         var carriers = new uint[64];
         var members = new long[16];
         bool spreading = rumors is not null && (rumors.ActiveLo | rumors.ActiveHi) != 0;
+        if (spreading)   // after encounters and arrivals, so the copies match what Spread used to read live
+            Parallel.ForEach(Partitioner.Create(0, (int)contactStart[^1], 16384), range =>
+            {
+                for (int k = range.Item1; k < range.Item2; k++)
+                {
+                    ref var c = ref contacts[k];
+                    c.Info = Info[c.Agent]; c.Lo = MaskLo[c.Agent]; c.Hi = MaskHi[c.Agent];
+                }
+            });
         Parallel.ForEach(partitions, () => (Carriers: new uint[64], Members: new long[16]), (range, _, local) =>
         {
             for (int i = range.Item1; i < range.Item2; i++)
@@ -200,10 +218,10 @@ public sealed class Population
             {
                 uint z = (uint)k, info = Info[z];
                 if (!IsZombie(info) || (info & (Dead | Detailed)) != 0) continue;
-                uint cx = PosX[z] >> 16, cz = PosZ[z] >> 16;
+                uint cx = PosX[z] >> BiteShift, cz = PosZ[z] >> BiteShift;
                 for (int oz = -1; oz <= 1; oz++)
                     for (int ox = -1; ox <= 1; ox++)
-                        for (uint h = humanHeads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; h != None; h = humanNext[h])
+                        for (uint h = biteHeads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; h != None; h = biteNext[h])
                         {
                             if ((Info[h] & Detailed) != 0) continue;
                             long dx = (long)PosX[h] - PosX[z], dz = (long)PosZ[h] - PosZ[z];
@@ -243,20 +261,23 @@ public sealed class Population
         uint info = Info[i];
         if (IsZombie(info) || (info & Dead) != 0) { nextLo[i] = 0; nextHi[i] = 0; return; }
         uint x = PosX[i], z = PosZ[i], faction = (uint)FactionOf(info) & 7, oldLo = MaskLo[i], oldHi = MaskHi[i], heardLo = 0, heardHi = 0;
-        uint cx = x >> 16, cz = z >> 16;
+        uint cx = x >> ContactShift, cz = z >> ContactShift;
         ulong c2 = (ulong)ContactRadius * ContactRadius;
         for (int oz = -1; oz <= 1; oz++)
             for (int ox = -1; ox <= 1; ox++)
-                for (uint b = humanHeads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; b != None; b = humanNext[b])
+            {
+                uint cell = CellOf(cx + (uint)ox, cz + (uint)oz, TableMask);
+                for (uint k = contactStart[cell], end = contactStart[cell + 1]; k < end; k++)
                 {
-                    uint binfo = Info[b];
-                    if (b == i) continue;
-                    long dx = (long)PosX[b] - x, dz = (long)PosZ[b] - z;
+                    ref readonly var b = ref contacts[k];
+                    if (b.Agent == i) continue;
+                    long dx = (long)b.X - x, dz = (long)b.Z - z;
                     if ((ulong)(dx * dx + dz * dz) > c2) continue;
-                    uint trust = r.Trust[faction * 8 + ((uint)FactionOf(binfo) & 7)];
-                    heardLo |= Listen(i, b, tick, MaskLo[b] & ~oldLo & r.ActiveLo, 0, trust, r.Credibility);
-                    heardHi |= Listen(i, b, tick, MaskHi[b] & ~oldHi & r.ActiveHi, 32, trust, r.Credibility);
+                    uint trust = r.Trust[faction * 8 + ((uint)FactionOf(b.Info) & 7)];
+                    heardLo |= Listen(i, b.Agent, tick, b.Lo & ~oldLo & r.ActiveLo, 0, trust, r.Credibility);
+                    heardHi |= Listen(i, b.Agent, tick, b.Hi & ~oldHi & r.ActiveHi, 32, trust, r.Credibility);
                 }
+            }
         uint newLo = (Forget(i, tick, oldLo, 0, r.FadeThreshold) | heardLo) & r.ActiveLo, newHi = (Forget(i, tick, oldHi, 32, r.FadeThreshold) | heardHi) & r.ActiveHi;
         nextLo[i] = newLo; nextHi[i] = newHi;
         for (uint m = newLo; m != 0; m &= m - 1) carriers[BitOperations.TrailingZeroCount(m)]++;
@@ -367,14 +388,24 @@ public sealed class Population
     void BuildGrid()
     {
         Array.Fill(heads, None);
-        Array.Fill(humanHeads, None);
+        Array.Fill(biteHeads, None);
+        Array.Clear(contactStart);
         for (uint i = 0; i < Count; i++)
         {
-            if ((Info[i] & Dead) != 0) { next[i] = humanNext[i] = None; continue; }
-            uint h = CellOf(PosX[i] >> 16, PosZ[i] >> 16, TableMask);
+            contactCell[i] = None;
+            if ((Info[i] & Dead) != 0) { next[i] = biteNext[i] = None; continue; }
+            uint h = CellOf(PosX[i] >> NearShift, PosZ[i] >> NearShift, TableMask);
             next[i] = heads[h]; heads[h] = i;
-            if (!IsZombie(Info[i])) { humanNext[i] = humanHeads[h]; humanHeads[h] = i; }
+            if (IsZombie(Info[i])) continue;
+            h = CellOf(PosX[i] >> BiteShift, PosZ[i] >> BiteShift, TableMask);
+            biteNext[i] = biteHeads[h]; biteHeads[h] = i;
+            h = contactCell[i] = CellOf(PosX[i] >> ContactShift, PosZ[i] >> ContactShift, TableMask);
+            contactStart[h + 1]++;
         }
+        for (long h = 1; h < contactStart.Length; h++) contactStart[h] += contactStart[h - 1];
+        Array.Copy(contactStart, contactFill, contactFill.Length);
+        for (uint i = 0; i < Count; i++)
+            if (contactCell[i] != None) contacts[contactFill[contactCell[i]]++] = new Contact { Agent = i, X = PosX[i], Z = PosZ[i] };
     }
 
     // Living agents within a radius (metres) of a point, from the grid of the last tick. Detailed agents included.
@@ -383,8 +414,8 @@ public sealed class Population
         var found = new List<uint>();
         uint mx = ToMm(x), mz = ToMm(z), r = (uint)(radius * 1000);
         long r2 = (long)r * r;
-        int reach = (int)(r >> 16) + 1;
-        uint cx = mx >> 16, cz = mz >> 16;
+        int reach = (int)(r >> NearShift) + 1;
+        uint cx = mx >> NearShift, cz = mz >> NearShift;
         var seen = new HashSet<uint>();
         for (int ox = -reach; ox <= reach; ox++)
             for (int oz = -reach; oz <= reach; oz++)

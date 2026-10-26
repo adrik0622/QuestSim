@@ -50,5 +50,19 @@ dead, arrivals); crowd placeholders; local-first `scripts/test_all.sh` (GitHub w
 manual-only). Full local suite green: 124 domain checks, all ENet suites, living, both Xvfb
 screens, E1 checks.
 
+2026-10-26 (Windows): native Windows 11 test machine `whitetop` (Ryzen 5 2600, 32 GB, RX 5700,
+AMD Vulkan 1.3) set up over SSH (RUNBOOK "Windows test machine"). `test_all.sh --all` green there:
+124 domain checks, items 12, build 11, multiplayer 12, save-failures 4, defeat 3, content 2,
+living 6 (1M agents, 20.0 ticks/s, no lag), E1 12 (CPU and Vulkan bit-identical on AMD),
+8-player load (20.04 ticks/s, ~73 KiB/s per client). Xvfb screens skipped (no Xvfb on Windows).
+LAN: a headless Linux client joined a Windows server (192.168.1.x) in 0.7 s and moved at 20 ticks/s.
+Fixes found there: (1) Windows refuses to replace a file another process holds open, which
+crashed the server when a reader touched the save/status mid-write: `WorldStorage.ReplaceFile`
+retries for up to 2 s on Windows, then fails closed. (2) The coarse population step took
+~0.7 s (no rumors) and ~4.5 s (one active rumor) per 1 s tick on the 2600: grids were 65.5 m
+cells for 5 m / 30 m searches. Grids now sized to each radius, contact grid laid out contiguously:
+0.12 s / 0.41 s there, 0.07 s / 0.08 s on the 5950X; state bit-identical to before (fingerprint).
+(3) Test scripts made cross-platform (process suspend, GPU-handle check, Python name, LF endings).
+
 Next action: director playtests again (flicker, pop-in, placeholders); then choose the next
-task, e.g. F15 extensive building, or Windows verification once the machine is reachable.
+task, e.g. F15 extensive building, or a graphical Windows client playtest on whitetop.

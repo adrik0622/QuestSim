@@ -31,22 +31,26 @@ step() {   # step NAME COMMAND...
   results+=("$status $name")
 }
 
+# Windows' python3 is usually the Microsoft Store stub; the real interpreter is python there.
+py=python3
+if ! python3 -c '' >/dev/null 2>&1; then py=python; fi
+
 skip() { printf '%-22s SKIP  (%s)\n' "$1" "$2"; results+=("SKIP $1"); }
 
 step domain-checks bash scripts/check.sh
 step game-build bash scripts/build_game.sh
-step items python3 scripts/verify_items.py
-step build python3 scripts/verify_build.py
-step multiplayer python3 scripts/verify_multiplayer.py
-step save-failures python3 scripts/verify_save_failures.py
-step defeat python3 scripts/verify_defeat.py
-step content python3 scripts/verify_content.py
+step items "$py" scripts/verify_items.py
+step build "$py" scripts/verify_build.py
+step multiplayer "$py" scripts/verify_multiplayer.py
+step save-failures "$py" scripts/verify_save_failures.py
+step defeat "$py" scripts/verify_defeat.py
+step content "$py" scripts/verify_content.py
 
 if [ "$mode" != "--quick" ]; then
-  step living capped 12G python3 scripts/verify_living.py
+  step living capped 12G "$py" scripts/verify_living.py
   if command -v xvfb-run >/dev/null 2>&1; then
-    step build-screen python3 scripts/verify_build_screen.py
-    step city-screen capped 8G python3 scripts/verify_city_screen.py
+    step build-screen "$py" scripts/verify_build_screen.py
+    step city-screen capped 8G "$py" scripts/verify_city_screen.py
   else
     skip build-screen "xvfb-run not installed"; skip city-screen "xvfb-run not installed"
   fi
@@ -59,7 +63,7 @@ if [ "$mode" != "--quick" ]; then
   fi
 fi
 if [ "$mode" = "--all" ]; then
-  step load-8-players capped 14G python3 scripts/verify_load.py
+  step load-8-players capped 14G "$py" scripts/verify_load.py
 fi
 
 echo

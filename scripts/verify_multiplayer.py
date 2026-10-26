@@ -7,18 +7,66 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import socket
 import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-ENGINE = ROOT / '.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64'
+ENGINE = ROOT / ('.tools/godot/Godot_v4.6.2-stable_mono_win64.exe' if os.name == 'nt'
+                else '.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64')
+
+
+def pause(process, resume=False):
+    """SIGSTOP/SIGCONT, or suspend/resume every thread of the process on Windows."""
+    if os.name != 'nt':
+        process.send_signal(signal.SIGCONT if resume else signal.SIGSTOP)
+        return
+    import ctypes
+    kernel, ntdll = ctypes.WinDLL('kernel32'), ctypes.WinDLL('ntdll')
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    handle = ctypes.c_void_p(kernel.OpenProcess(0x0800, False, process.pid))  # PROCESS_SUSPEND_RESUME
+    assert handle.value, 'cannot open process'
+    try:
+        assert (ntdll.NtResumeProcess if resume else ntdll.NtSuspendProcess)(handle) == 0
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def gpu_handles(process):
+    """GPU device files (Linux) or graphics driver DLLs (Windows) the process holds; dxgi.dll alone is not a driver."""
+    if os.name != 'nt':
+        found = []
+        for fd in Path(f'/proc/{process.pid}/fd').iterdir():
+            try:
+                target = os.readlink(fd)
+                if target.startswith(('/dev/nvidia', '/dev/dri')):
+                    found.append(target)
+            except OSError:
+                pass
+        return found
+    import ctypes
+    kernel, psapi = ctypes.WinDLL('kernel32'), ctypes.WinDLL('psapi')
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    handle = ctypes.c_void_p(kernel.OpenProcess(0x0410, False, process.pid))  # QUERY_INFORMATION | VM_READ
+    modules, needed = (ctypes.c_void_p * 2048)(), ctypes.c_ulong()
+    try:
+        assert psapi.EnumProcessModulesEx(handle, modules, ctypes.sizeof(modules), ctypes.byref(needed), 3)
+        names = []
+        for module in modules[:needed.value // ctypes.sizeof(ctypes.c_void_p)]:
+            name = ctypes.create_unicode_buffer(260)
+            psapi.GetModuleBaseNameW(handle, ctypes.c_void_p(module), name, 260)
+            names.append(name.value.lower())
+    finally:
+        kernel.CloseHandle(handle)
+    drivers = ('vulkan-1', 'opengl32', 'd3d11', 'd3d12', 'ati', 'amd', 'nvogl', 'nvwgf', 'nvd3d', 'igvk', 'ig9', 'igd')
+    return [n for n in names if n.startswith(drivers)]
 
 
 def read(path):
     try:
         return json.loads(path.read_text())
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, PermissionError, json.JSONDecodeError):   # PermissionError: Windows, mid-replace
         return None
 
 
@@ -35,7 +83,12 @@ def wait(predicate, description, timeout=10):
 def atomic(path, value):
     tmp = path.with_suffix(path.suffix + '.writing')
     tmp.write_text(json.dumps(value))
-    tmp.replace(path)
+    for attempt in range(40):   # Windows refuses the rename while the game is reading the target
+        try:
+            return tmp.replace(path)
+        except PermissionError:
+            if attempt == 39: raise
+            time.sleep(.05)
 
 
 class NetworkFixture:
@@ -72,7 +125,12 @@ class NetworkFixture:
         return process
 
     def status(self, label):
-        return read(self.directory / (label + '.json'))
+        path = self.directory / (label + '.json')
+        for _ in range(20):   # an existing status can be momentarily unreadable on Windows while the game replaces it
+            if (value := read(path)) is not None or not path.exists():
+                return value
+            time.sleep(.01)
+        return read(path)
 
     def ready(self, label, count=None):
         def condition():
@@ -125,15 +183,7 @@ def main():
         assert status['display'] == 'headless' and status['tick'] == 0
         time.sleep(.4)
         assert f.status('server')['tick'] == 0
-        gpu_fds = []
-        for fd in Path(f'/proc/{server.pid}/fd').iterdir():
-            try:
-                target = os.readlink(fd)
-                if target.startswith(('/dev/nvidia', '/dev/dri')):
-                    gpu_fds.append(target)
-            except OSError:
-                pass
-        assert not gpu_fds, gpu_fds
+        assert not (handles := gpu_handles(server)), handles
         passed('CPU headless server starts paused with no GPU device handles')
         f.launch('alice', 'alice'); a = f.ready('alice', 1); aid = a['ownId']
         f.launch('bob', 'bob'); b = f.ready('bob', 2); bid = b['ownId']
@@ -188,7 +238,7 @@ def main():
         passed('last disconnect freezes clock and persists absent character records')
         metrics = {'port': f.port, 'startup_seconds': dict(f.startups), 'server_rss_bytes': f.status('server')['rssBytes'],
                    'client_rss_bytes': [f.status('alice')['rssBytes'], f.status('bob')['rssBytes']],
-                   'server_display': f.status('server')['display'], 'gpu_device_handles': gpu_fds,
+                   'server_display': f.status('server')['display'], 'gpu_device_handles': handles,
                    'tick_rate': 20, 'snapshot_rate': 10, 'network': 'ENet UDP loopback', 'build': 'Debug'}
         f.close('server', server=True)
         # Deliberate offline save fixture: changed geometry and retained non-empty character data.

@@ -359,7 +359,17 @@ public static class WorldStorage
             using (var writer = new StreamWriter(file, leaveOpen: true)) { writer.Write(json); writer.Flush(); }
             file.Flush(flushToDisk: true);
         }
-        File.Move(path + ".tmp", path, overwrite: true);
+        ReplaceFile(path + ".tmp", path);
+    }
+    // Windows refuses to replace a file another process holds open without delete sharing (a reader, antivirus, the
+    // indexer). Those holds are brief, so retry for up to 2 s there before failing closed; elsewhere rename never blocks.
+    public static void ReplaceFile(string source, string path)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { File.Move(source, path, overwrite: true); return; }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException && OperatingSystem.IsWindows() && attempt < 40) { Thread.Sleep(50); }
+        }
     }
     public static void Validate(WorldSave w)
     {

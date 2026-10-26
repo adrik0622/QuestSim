@@ -658,7 +658,10 @@ public partial class Session : Node
     private void ReadTestIntent()
     {
         if (!File.Exists(intentPath)) return;
-        var command = JsonSerializer.Deserialize<TestIntent>(File.ReadAllText(intentPath), new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        string text;
+        try { text = File.ReadAllText(intentPath); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }   // Windows: the test is replacing it; next frame
+        var command = JsonSerializer.Deserialize<TestIntent>(text, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         if (command is null || command.Serial <= commandSerial) return;
         commandSerial = command.Serial;
         desiredX = command.X; desiredZ = command.Z; desiredHeading = command.Heading; testSequence = command.Sequence;
@@ -691,7 +694,7 @@ public partial class Session : Node
         if (capturePath.Length == 0 || view is null) return;
         // Viewport capture for Xvfb screen tests; written beside, then renamed so readers never see a partial PNG.
         GetViewport().GetTexture().GetImage().SavePng(capturePath + ".tmp.png");
-        File.Move(capturePath + ".tmp.png", capturePath, overwrite: true);
+        WorldStorage.ReplaceFile(capturePath + ".tmp.png", capturePath);
         capturePath = "";
     }
 

@@ -1,12 +1,11 @@
 """Q02b: one-wall ENet race, durable build replay, lost reply, failed save and v2 migration."""
 from concurrent.futures import ThreadPoolExecutor
 import json
-import signal
 from pathlib import Path
 import threading
 import time
 import uuid
-from verify_multiplayer import NetworkFixture, wait, read, atomic
+from verify_multiplayer import NetworkFixture, wait, read, atomic, pause
 from verify_items import reply
 
 PANEL = 'questsim:wall-panel'
@@ -112,7 +111,7 @@ def run_recovery(fail_save):
         if fail_save:
             obstruction=Path(str(f.save)+'.tmp'); obstruction.mkdir()
         else:
-            f.processes['server'][0].send_signal(signal.SIGSTOP)
+            pause(f.processes['server'][0])
         f.command('alice',buildRequestId=request)
         if fail_save:
             assert f.processes['server'][0].wait(timeout=8)==1
@@ -125,8 +124,8 @@ def run_recovery(fail_save):
         else:
             wait(lambda: json.loads((f.profiles/'alice.json').read_text()).get('LastBuildRequestId')==request,'pending build durable')
             time.sleep(.2)
-            f.processes['alice'][0].send_signal(signal.SIGSTOP)
-            f.processes['server'][0].send_signal(signal.SIGCONT)
+            pause(f.processes['alice'][0])
+            pause(f.processes['server'][0], resume=True)
             wait(lambda: (s:=read(f.save)) and any(r['RequestId']==request and r['Success'] for r in s['BuildReceipts']),'build committed')
             f.close('server',abrupt=True)
             assert f.status('alice')['lastBuild'] is None and 'BUILD_REPLY' not in (f.directory/'alice.log').read_text()

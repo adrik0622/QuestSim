@@ -46,7 +46,7 @@ public sealed partial class WorldAuthority
             file.Write(bytes);
             file.Flush(flushToDisk: true);
         }
-        File.Move(path + ".tmp", path, overwrite: true);
+        WorldStorage.ReplaceFile(path + ".tmp", path);
         return name;
     }
 
