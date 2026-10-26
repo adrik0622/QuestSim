@@ -1,0 +1,1 @@
+{"checks": ["real F input takes one item, updates inventory/stock, and rejects the other player", "real T input replays both original outcomes without another item or receipt", "reconnected window retains inventory and saved request for T replay", "item interaction leaves disconnect absence and empty-world clock intact"], "stock": 0, "receipt_count": 2}

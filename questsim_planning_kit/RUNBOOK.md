@@ -19,14 +19,15 @@ Initial sandbox DNS and X11 EPERM failures are **resolved after full access**.
 No bridge, privilege change or modification to the sibling project was needed.
 Original sandbox checkpoints remain in `.artifacts/checkpoints/000-*` and `001-*`.
 After full access .git was absent; a normal local repository was initialized.
-`git log --oneline` now verifies real checkpoints. No remote configured or pushed.
+`git log --oneline` now verifies real checkpoints. GitHub origin/main synchronization
+was authorized afterward; see the GitHub checkpoint section below.
 
 ## Build and launch
 
 | Command | Result / purpose |
 | --- | --- |
 | `bash scripts/install_godot.sh` | Pinned official archive, SHA-256 checked, local extraction; preserves existing installation. Initial download/extraction steps verified manually; preservation branch verified through script. |
-| `bash scripts/check.sh` | Offline Release build, 24 domain checks including seven original fixture checks; real network checks are separate below. |
+| `bash scripts/check.sh` | Offline Release build, 38 domain checks including seven original fixture checks; real network checks are separate below. |
 | `bash scripts/build_presentation.sh` | Godot C# Debug build, zero warnings/errors. |
 | `.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64 --headless --path experiments/presentation --quit-after 2` | Bootstrap smoke; prints `QUESTSIM_BOOTSTRAP_READY actors=4`. This is not an authoritative server. |
 | `bash scripts/run_presentation.sh 2d` | Overhead sprites. |
@@ -83,6 +84,8 @@ Q00 proved desktop access only. Q01 server/client/persistence verification is
 recorded below; standalone exports and other platforms remain untested.
 
 ## Q01 — authoritative shared room
+
+Historical v1 behavior below; current v2 item behavior and migration are at the end.
 
 The low-poly 3D shared game is `src/QuestSim.Game/`. The presentation lab above
 remains a separate disposable comparison. Q01 has no NPCs or shared construction
@@ -144,7 +147,7 @@ no client prediction or WAN smoothing work has been done.
 Verified checks (fresh disposable `.artifacts/q01/*` directories, never play saves):
 
 ```bash
-bash scripts/check.sh                         # 24 domain/fixture checks
+bash scripts/check.sh                         # Q01 baseline: 24; current total: 38
 python3 scripts/verify_multiplayer.py          # 12 real ENet checks
 python3 scripts/verify_save_failures.py         # 4 startup/shutdown persistence faults
 python3 scripts/verify_shared_desktop.py        # 6 real two-window checks + screenshots
@@ -161,3 +164,63 @@ Q01_RESULTS.md records measured startup/memory, verified checks and known limits
 Other OS/hardware, 2–8 load, exported binaries, packet-loss/latency behavior and
 crash/power-loss durability remain unverified. The old Q00 frame samples are not
 measurements of this networked scene. Full raw evidence stays in `.artifacts/`.
+
+## GitHub checkpoints — authorized 2026-10-25
+
+Origin: `git@github.com:adrik0622/QuestSim.git`; `main` tracks `origin/main`.
+Director authorized periodic pushes of verified milestones. Initial `237c943` and
+Q02 runtime `60d8357` pushes succeeded; final docs/evidence follow. Never force-push.
+If the remote advances independently, fetch/inspect/preserve that work before pushing.
+
+```bash
+git status --short
+git push origin main
+git ls-remote origin refs/heads/main
+git rev-parse HEAD
+```
+
+Confirm remote main equals local HEAD after a claimed sync. Build caches, tools,
+raw logs, play saves and profile tokens stay ignored; concise synthetic test
+screenshots/results are versioned. No global Git/SSH configuration changed.
+
+## Q02a — one bandage, durable retry
+
+Build and launch commands stay the same. Rebuild **all** game processes for wire
+protocol 2; old clients are incompatible. Save schema 2/content
+`questsim:q02-room-v1` loads new fields for supply and durable receipts. Valid Q01
+saves/profiles migrate as described in Q02_RESULTS.md, with an immutable
+`.v1-<guid>.bak` copy before any v2 replacement. Unknown/incomplete saves still refuse.
+
+- **F:** make a new pickup attempt at the green crate (within two metres).
+- **T:** resend the saved attempt and target, including after reconnect/restart.
+- HUD shows your bandage count and shared stock; crate turns grey when empty.
+- Moving closer after a rejected attempt requires **F**, since **T** replays the
+  original outcome. No use/drop/trade/refill or general inventory UI exists yet.
+- Yellow construction module stays static; only the green crate is interactive.
+
+Server saves inventory, stock and receipt before reporting success. Normal save
+and crash/power-loss limits above remain; one atomic file is not a distributed
+transaction/power-loss guarantee. Never prune receipts or edit stock to refill this
+probe; v2 validation intentionally checks those facts agree. For a fresh test
+without altering your play save, stop the current server and use a **new** path:
+
+```bash
+bash scripts/run_server.sh --save=.artifacts/play/fresh-item-test.json
+# In other terminals: bash scripts/run_client.sh alice / bob
+```
+
+Current verified checks:
+
+```bash
+bash scripts/check.sh                         # 38 domain/fixture checks
+bash scripts/build_game.sh                    # zero warnings/errors
+python3 scripts/verify_items.py                # 12 item ENet/recovery/migration checks
+python3 scripts/verify_item_desktop.py         # 4 actual F/T/reconnect checks
+python3 scripts/verify_multiplayer.py          # 12 Q01 network regression checks
+python3 scripts/verify_save_failures.py        # 4 Q01 persistence fault checks
+python3 scripts/verify_terminal_shutdown.py    # 3 launcher/Ctrl-C checks
+```
+
+All use fresh disposable fixtures; actual play saves are not edited by tests.
+The lost-reply test sends SIGSTOP/CONT/KILL only to its tracked test children.
+It never suspends user processes. Q02_RESULTS.md contains evidence and limitations.

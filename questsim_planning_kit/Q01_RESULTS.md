@@ -1,5 +1,9 @@
 # Q01 — two-client increment, 2026-10-25
 
+Historical checkpoint 237c943. Current Q02a runs save/protocol v2; see
+Q02_RESULTS.md and RUNBOOK.md. These screenshots, metrics and source hashes
+belong to Q01, not the current changed scene.
+
 Verified: one CPU-only dedicated authority, two independent Godot clients in a
 small low-poly 3D room, shared movement/presence, persistent reconnect and an
 empty-server-paused simulation clock. First/third-person cameras are retained.

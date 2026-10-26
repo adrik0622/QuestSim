@@ -1,6 +1,7 @@
 # Current task: Q02a / one atomic item pickup
 
-Authorized 2026-10-25 after Q01. Origin/main synchronization is authorized; push
+Status: acceptance complete 2026-10-25; Q02_RESULTS.md records evidence/limits.
+Authorized after Q01. Origin/main synchronization is authorized; push
 verified milestones occasionally, never force-push. Preserve all existing work.
 
 One green supply crate, one bandage. Two independent clients race to take it.
@@ -16,7 +17,7 @@ reach; real ENet race and replay; reconnect/restart; lost reply via abrupt serve
 termination after commit; save failure never acknowledges success; desktop F/T
 and shared crate/inventory display. Rerun affected Q01 regression checks.
 
-Introduces save/content/protocol v2. Validate and back up valid Q01 saves before
+Introduces save/protocol v2 and content ID questsim:q02-room-v1. Validate and back up valid Q01 saves before
 migration; preserve identities, positions, clock, inventory/progression and blocks.
 Migration adds one supply and empty receipts once, never restocks a v2 crate.
 Old clients must rebuild; local profile IDs remain compatible. Unknown/incomplete

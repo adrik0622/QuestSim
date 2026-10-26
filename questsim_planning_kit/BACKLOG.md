@@ -26,6 +26,10 @@ Standalone exports, other platforms and 2–8 load coverage remain explicit futu
 
 ## Q02 - One command, one result
 
+Q02a single bandage pickup verified 2026-10-25: race, durable retry, migration,
+restart/lost reply/save-failure and GUI evidence in Q02_RESULTS.md. One modular
+build placement and network-condition experiments remain separate bounded tasks.
+
 - Owner: authority agent. Dependency: Q01. Timebox: 5-10 days.
 - Outcome: movement, shared inventory and one building action follow server rules.
 - Implementation: intent commands, request IDs, validation and atomic state changes. Stable plain-data snapshots/results; engine instance IDs never become world IDs.
