@@ -20,7 +20,10 @@ Implemented on `nightly` (each step checked, committed and pushed):
 - F11 data-defined items and data-only mods (manifest, namespaces, dependencies; worlds refuse
   to start without a recorded mod); U uses consumables.
 - F12 acceptance chain in domain checks; F13 `scripts/inspect_world.py`; F14 CI on Linux and
-  Windows (domain + population CPU checks).
+  Windows (domain checks, population CPU checks, game compiles).
+- F6: binary actor packets + changed-only world JSON; 8 players + 1M agents at 19.9 ticks/s,
+  ~68 KiB/s per client on loopback.
+- `--populate=N` gives an existing (migrated) world a population; tested on a copy of the play save.
 
 Save/protocol v4, content `questsim:city-v1`; v1–v3 saves migrate with byte-exact backups.
 
