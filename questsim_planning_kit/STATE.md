@@ -34,5 +34,6 @@ One fixed cell and wall; no demolition, doors, refill, navigation or generic
 construction/inventory. Receipts unpruned. Screen tests use software GL.
 
 Results: Q02B_RESULTS.md. Handoff: ../HANDOFF_2026-10-25.md.
-Next action: director chooses the next bounded task; no construction expansion
-is authorized by this milestone.
+Next action: E1 population and rumor experiment written in CURRENT_TASK.md
+(2026-10-25), awaiting director approval before implementation. GPU bulk
+simulation and story-time invention are allowed; everything is experimental.
