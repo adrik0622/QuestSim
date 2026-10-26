@@ -8,7 +8,7 @@ public static class AcceptanceChecks
     {
         var content = ContentRegistry.Load("content/core", "mods/example-rations");
         var w = new WorldAuthority(new WorldSave { Population = 60_000, StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 12 }, Mods = content.Mods },
-            synchronousPopulation: true) { Content = content };
+            synchronousPopulation: true) { Content = content, PromotionClearance = 0 };
         var a = w.Join(2, new string('a', 32), "Ana");
         var b = w.Join(3, new string('b', 32), "Ben");
         b.X = 900; b.Z = 0; while (!w.IsSafe(b.X, b.Z, b.Id)) b.X += 1;     // B is elsewhere

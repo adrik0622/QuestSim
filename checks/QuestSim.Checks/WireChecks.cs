@@ -5,7 +5,7 @@ public static class WireChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var w = new WorldAuthority(new WorldSave { Population = 40_000 }, synchronousPopulation: true);
+        var w = new WorldAuthority(new WorldSave { Population = 40_000 }, synchronousPopulation: true) { PromotionClearance = 0 };
         var a = w.Join(2, new string('a', 32), "Alice");
         a.X = 3.123456789; a.Z = 20.987654321;
         Steps(w, WorldAuthority.PopulationEvery);

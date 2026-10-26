@@ -36,7 +36,7 @@ public partial class RoomView : Node3D
         };
         AddChild(new WorldEnvironment { Environment = environment });
         AddChild(sun);
-        AddChild(camera); camera.Current = true; camera.Fov = 75;
+        AddChild(camera); camera.Current = true; camera.Fov = 75; camera.Near = .1f; camera.Far = 2500;
         camera.Position = new Vector3(-8, 6, 0); camera.LookAt(new Vector3(0, 1, 0));
         var layer = new CanvasLayer(); AddChild(layer);
         layer.AddChild(hudBack);
@@ -52,13 +52,13 @@ public partial class RoomView : Node3D
     {
         Box(this, new Vector3(0, -.1f, 0), new Vector3(12, .2f, 12), new Color(.25f, .28f, .3f));
         city = new CityGen(state.WorldSeed);
-        var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.Half * 2, CityGen.Half * 2) }, Position = new Vector3(0, -.05f, 0),
+        var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.Half * 2, CityGen.Half * 2) }, Position = new Vector3(0, -.3f, 0),   // well below chunk ground: no z-fighting at a distance
             MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(.35f, .5f, .25f), Roughness = 1 } };
         AddChild(ground);
         foreach (var road in city.Roads)
         {
             var from = new Vector3(road.X1, 0, road.Z1); var to = new Vector3(road.X2, 0, road.Z2);
-            var strip = Box(this, (from + to) / 2 + new Vector3(0, -.03f, 0), new Vector3(CityGen.RoadHalfWidth * 2, .02f, from.DistanceTo(to)), new Color(.2f, .2f, .22f));
+            var strip = Box(this, (from + to) / 2 + new Vector3(0, -.06f, 0), new Vector3(CityGen.RoadHalfWidth * 2, .12f, from.DistanceTo(to)), new Color(.2f, .2f, .22f));
             strip.Rotation = new Vector3(0, Mathf.Atan2(to.X - from.X, to.Z - from.Z), 0);
         }
         var site = WorldSave.BuildSite; // Floor marker for the one build cell.
@@ -93,7 +93,7 @@ public partial class RoomView : Node3D
         if (biome != Biome.Field)
         {
             var colour = biome switch { Biome.Urban => new Color(.3f, .31f, .33f), Biome.Town => new Color(.42f, .4f, .35f), _ => new Color(.17f, .33f, .17f) };
-            node.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.ChunkSize, CityGen.ChunkSize) }, Position = new Vector3(x0 + half, -.04f, z0 + half),
+            node.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.ChunkSize, CityGen.ChunkSize) }, Position = new Vector3(x0 + half, -.02f, z0 + half),
                 MaterialOverride = new StandardMaterial3D { AlbedoColor = colour, Roughness = 1 } });
         }
         var buildings = city.Chunk(cx, cz);

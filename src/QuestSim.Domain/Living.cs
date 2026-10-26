@@ -25,6 +25,8 @@ public sealed partial class WorldAuthority
     public IReadOnlyDictionary<uint, Npc> Npcs => npcs;
     public long PopulationLagged { get; private set; }
     public Action<CharacterRecord, Npc>? Downed;
+    // Nobody is promoted within this distance of a player, so new NPCs never pop in at arm's length.
+    public double PromotionClearance { get; set; } = 20;
 
     void StartPopulation()
     {
@@ -83,6 +85,7 @@ public sealed partial class WorldAuthority
                 if ((pop.Info[i] & (Population.Detailed | Population.Dead)) != 0) continue;
                 double x = Population.ToMetres(pop.PosX[i]), z = Population.ToMetres(pop.PosZ[i]);
                 if (!FindWalkable(ref x, ref z)) continue;   // coarse agents ignore buildings; step out of one or stay coarse
+                if (PromotionClearance > 0 && players.Any(p => Distance(p.X, p.Z, x, z) < PromotionClearance)) continue;
                 var delta = State.AgentDeltas.FirstOrDefault(d => d.Index == i);
                 npcs[i] = new Npc
                 {

@@ -6,7 +6,7 @@ public static class DefeatChecks
     static WorldAuthority NewWorld(bool permadeath = false) => new(new WorldSave
     {
         Population = 20_000, Permadeath = permadeath, StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 5 }
-    }, synchronousPopulation: true);
+    }, synchronousPopulation: true) { PromotionClearance = 0 };
 
     static void Down(WorldAuthority w, CharacterRecord victim, Npc attacker)
     {

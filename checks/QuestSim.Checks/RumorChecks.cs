@@ -5,7 +5,7 @@ public static class RumorChecks
 {
     public static void Run(Action<bool, string> check)
     {
-        var w = new WorldAuthority(new WorldSave { Population = 40_000, StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 5 } }, synchronousPopulation: true);
+        var w = new WorldAuthority(new WorldSave { Population = 40_000, StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 5 } }, synchronousPopulation: true) { PromotionClearance = 0 };
         var alice = w.Join(2, new string('a', 32), "Alice");
         Steps(w, WorldAuthority.PopulationEvery);
         alice.X = 3; alice.Z = 20;

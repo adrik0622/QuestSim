@@ -28,7 +28,7 @@ public static class LivingChecks
     public static void Run(Action<bool, string> check)
     {
         var save = new WorldSave { Population = 20_000, StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 3 } };
-        var w = new WorldAuthority(save, synchronousPopulation: true);
+        var w = new WorldAuthority(save, synchronousPopulation: true) { PromotionClearance = 0 };
         var twin = new WorldAuthority(new WorldSave { Population = 20_000 }, synchronousPopulation: true);
         check(w.Pop!.PosX.SequenceEqual(twin.Pop!.PosX) && w.Pop.Info.SequenceEqual(twin.Pop.Info) &&
               w.Pop.Info.Count(Population.IsZombie) is > 2_000 and < 8_000, "the seeded population regenerates identically (about a quarter zombies)");
@@ -36,6 +36,11 @@ public static class LivingChecks
         check(alice.Inventory[WorldAuthority.Pistol] == 1 && alice.Inventory[WorldAuthority.Ammo] == 3 && alice.Stat(CharacterRecord.Health) == 100,
             "new characters get the starting kit and default stats");
         Steps(w, WorldAuthority.PopulationEvery);
+        var clear = new WorldAuthority(new WorldSave { Population = 20_000 }, synchronousPopulation: true);
+        var cleo = clear.Join(2, new string('c', 32), "Cleo");
+        Steps(clear, WorldAuthority.PopulationEvery * 2);
+        check(clear.Npcs.Count > 0 && clear.Npcs.Values.All(n => Math.Sqrt((n.X - cleo.X) * (n.X - cleo.X) + (n.Z - cleo.Z) * (n.Z - cleo.Z)) >= 20),
+            $"by default nobody is promoted within 20 m of a player (no pop-in at arm's length; {clear.Npcs.Count} promoted farther out)");
         check(w.Npcs.Count > 0 && w.Npcs.Values.All(n => Math.Sqrt((n.X - alice.X) * (n.X - alice.X) + (n.Z - alice.Z) * (n.Z - alice.Z)) <= WorldAuthority.PromoteRadius + 13) &&
               w.Npcs.Keys.All(i => (w.Pop.Info[i] & Population.Detailed) != 0),
             $"agents near a player are promoted to 20 Hz detail ({w.Npcs.Count} near the plaza)");
