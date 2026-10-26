@@ -1,5 +1,12 @@
 # QuestSim director guide
 
+**Experimental phase (director, 2026-10-25).** Everything in this planning kit —
+"confirmed" directions, invariants, gates, budgets and rules in ENGINE_RULES.md — is a
+current working hypothesis for experimentation, not a fixed requirement. Agents should
+treat these as defaults to test, propose changes when evidence or a better idea
+suggests one, and never present a planning default as a director prohibition. The
+director revises any of it freely.
+
 ## Confirmed direction — 2026-10-25
 
 A living multiplayer world; first game is cooperative zombie survival. Persistent
@@ -73,7 +80,7 @@ Three candidate test stories:
 2. Barricading a route changes travel, delivery timing and where a horde encounters survivors.
 3. Helping a rival faction changes resources and relationships, opening one alliance while closing another.
 
-The faction response must use real resources and members. The director may reveal or connect opportunities; it cannot invent consequences after the fact merely to make the player important.
+**Story-time invention is allowed and a preferred approach to explore (2026-10-25).** As in the OnceLost devlog (VIDEO_REVIEW.md), when an opportunity is told the story director may create the items, creatures, locations and events it needs (a merchant's lost cart, rum, gold, wolves), shaped by facts already in the world (bears passed through, so wolf corpses instead of wolves) and materialized lazily when someone arrives. Once created, that content is committed shared state: the same for every player, persisted, and subject to the usual exactly-once rules. Faction responses can mix existing members/resources with story-time creation; which balance feels best is an experiment.
 
 ## Long character arcs
 

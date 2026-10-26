@@ -43,7 +43,7 @@ build placement and network-condition experiments remain separate bounded tasks.
 - Owner: simulation agent. Dependency: Q02. Timebox: 1-2 weeks for a narrow proof.
 - Outcome: humans and zombies retain identity across travel, detail transitions, infection/death and reload.
 - Implementation: detailed/coarse modes, next scheduled event, region/route state, real member IDs for coarse groups. Plain record storage and a small scheduler.
-- Acceptance: repeated boundary crossings preserve identity, inventory and health; an offscreen casualty remains dead. Restart preserves scheduled events. No hidden actor creation.
+- Acceptance: repeated boundary crossings preserve identity, inventory and health; an offscreen casualty remains dead. Restart preserves scheduled events. Actor creation is explicit and recorded with provenance (simulation or story-time).
 - Measure: 1k/10k/100k persistent records separately from detailed actors; baseline CPU and memory.
 - Compare: small all-detailed versus coarse scenarios across seeds. Invariants match; outcome drift is measured and director-approved rather than asserted equivalent.
 - Exclude: per-agent LLMs, every-agent continuous physics, all-pairs relationships.
@@ -84,7 +84,7 @@ build placement and network-condition experiments remain separate bounded tasks.
 - Owner: narrative/gameplay agent. Dependency: Q04, Q06. Timebox: 1-2 weeks.
 - Outcome: shortage relief, retaliation and rescue reference actual world state and player history.
 - Implementation: explicit preconditions, bound entity IDs, scores, cooldowns, shared opportunity state, expiry and validation at each step.
-- Acceptance: another player kills a giver, removes an item or changes the destination. The opportunity adapts/fails without inventing resources or contradictory facts. Unique rewards cannot be claimed twice.
+- Acceptance: another player kills a giver, removes an item or changes the destination. The opportunity adapts/fails without contradicting committed facts; story-time creation of new content (with provenance) is allowed. Unique rewards cannot be claimed twice.
 - Director test: explain each opportunity's causes and whether it changes a meaningful player choice.
 - Exclude: LLM authority, unrestricted natural-language action parser, general narrative planner, private alternate worlds.
 - Stop/reduce: remove a complex template if it cannot remain consistent under concurrent play.

@@ -4,7 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Read first
 
-`AGENTS.md` is authoritative. Before work, read `questsim_planning_kit/{AGENTS,CURRENT_TASK,STATE,RUNBOOK}.md`
+Everything is experimental right now: planning-kit rules are working hypotheses the director revises freely
+(DIRECTOR.md); don't present a planning default as a director prohibition. `AGENTS.md` is authoritative. Before work, read `questsim_planning_kit/{AGENTS,CURRENT_TASK,STATE,RUNBOOK}.md`
 (and `HANDOFF_2026-10-25.md` when resuming). `DIRECTOR.md` (2026-10-25 decisions) overrides older
 planning defaults. Consult only the relevant sections of `ENGINE_RULES.md` / `BACKLOG.md`; research and
 video docs are not required context for ordinary coding.

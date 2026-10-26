@@ -35,11 +35,11 @@ Realms, "Winsloss" = OnceLost). Everything below is **narrated claim** unless ma
 - **Rumors.** The texture does the spatial query; knowledge lives in a database. A naive
   range scan is O(N) per event; many concurrent carriers need spatial binning. The video
   does not address CPU↔GPU readback/latency — our main open design constraint.
-- **Quests vs our invariants.** Creating rum/wolves/gold when the story is told, and
-  choosing wolf corpses retroactively, is story-time invention. DIRECTOR.md forbids the
-  director inventing resources or consequences. Compatible variant: the underlying event
-  (merchant flees, cart left at tile X) is a committed fact in the simulation; only the
-  detailed representation is materialized lazily and deterministically from facts + seed.
+- **Story-time invention (adopted for experimentation, director 2026-10-25).** Creating
+  rum/wolves/gold when the story is told, shaped by existing tile facts (bears → wolf
+  corpses), is the approach to explore. For multiplayer: once created, content is a
+  committed fact with provenance, identical for all players and persisted; lazy detail
+  is materialized from those facts.
 - **Fact decay** fits beliefs/ephemeral traces; material facts (gold exists) end only via
   explicit events.
 - **Editable coarse layers + procedural detail** (biome/civilization tiles, NPC database
@@ -50,6 +50,6 @@ Realms, "Winsloss" = OnceLost). Everything below is **narrated claim** unless ma
 - DIRECTOR.md 2026-10-25: GPU bulk simulation allowed; CPU owns facts/ledgers.
 - Simulation experiments (population store, spread, tiers, factions incl. zombies) should
   compare CPU reference vs GPU kernels end to end, including readback latency.
-- Q07 (story opportunities) keeps the no-retroactive-invention rule; lazy materialization
-  only from committed facts.
+- Q07 (story opportunities) uses story-time creation; created content becomes committed
+  shared state and must not contradict existing facts.
 - Dialogue never owns state; phrasing variation is presentation only (deferred).

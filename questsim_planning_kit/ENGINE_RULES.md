@@ -1,6 +1,6 @@
 # QuestSim implementation agreement
 
-Apply to all agents working on this project, including delegated agents. Director instructions and actual repository constraints take precedence. This is a proposed agreement for the implementation repository, not an instruction to start building every feature immediately.
+Apply to all agents working on this project, including delegated agents. Director instructions and actual repository constraints take precedence. All rules here are experimental hypotheses during the current phase (director, 2026-10-25; see DIRECTOR.md). This is a proposed agreement for the implementation repository, not an instruction to start building every feature immediately.
 
 ## Outcome
 
@@ -38,7 +38,7 @@ Useful functions can initially be `ApplyCommand`, `StepWorld`, `GenerateChunk` a
 7. State visible to clients can differ by knowledge/relevance, but underlying facts cannot conflict.
 8. Save seed, generator version, content manifest, actor state, world edits and scheduled events. A seed alone is insufficient.
 9. Missing required mods cannot silently remove data or overwrite an incompatible save.
-10. The director may not invent resources, resurrect actors or reverse another player's action to protect a story.
+10. The story director may create resources, actors and events at story time (director, 2026-10-25), informed by existing facts. Created content becomes committed shared state with provenance. Avoid silently reversing another player's action to protect a story.
 
 ## Mod support
 
