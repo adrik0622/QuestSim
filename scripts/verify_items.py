@@ -170,7 +170,7 @@ def run_migration():
         f.launch('legacy','legacy'); client=f.ready('legacy',1)
         assert client['ownId']==actor_id and client['own']['Inventory']=={ITEM:4,'example:keepsake':2} and client['own']['Experience']==9
         migrated=read(f.save)
-        assert migrated['Version']==3 and migrated['Blocks']==original['Blocks'] and migrated['Tick']>=70
+        assert migrated['Version']==4 and migrated['Blocks'][:len(original['Blocks'])]==original['Blocks'] and len(migrated['Blocks'])==len(original['Blocks'])+5 and migrated['Tick']>=70
         request=uuid.uuid4().hex; f.command('legacy',pickupRequestId=request,containerId=CRATE)
         assert reply(f,'legacy',request)['Success'] and quantity(f,'legacy')==5
         f.close('legacy'); wait(lambda:f.status('server')['active']==0,'legacy client absent');f.close('server',server=True)

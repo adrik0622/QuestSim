@@ -81,6 +81,19 @@ try:
     passed('real T key replays each player\'s last build without another wall or cost')
     press(winner, 'C'); time.sleep(.5)  # One-slot intent file: let C be read and rendered before capturing.
     capture(winner, 'build-first-person')
+    press(winner, 'C'); time.sleep(.5)
+    # Walk Alice east through the partition doorway, then south out of the room's door into the city plaza.
+    def position(label):
+        status = f.status(label)
+        return next(a for a in status['snapshot']['Actors'] if a['Id'] == status['ownId'])
+    f.command('alice', 1, 0)
+    wait(lambda: position('alice')['X'] > 2.8, 'alice reaches the south door column', 15)
+    f.command('alice', 0, 1)
+    wait(lambda: position('alice')['Z'] > 25, 'alice walks out into the plaza', 20)
+    f.command('alice', holdKeys=['Down']); time.sleep(.9)   # tilt the camera toward the horizon
+    f.command('alice'); time.sleep(.4)
+    capture('alice', 'city-outside')
+    passed('a player can leave the starter room through its door and see the generated city')
     for label in ['alice', 'bob']: f.close(label)
     wait(lambda: f.status('server')['active'] == 0, 'clients absent')
     f.close('server', server=True)

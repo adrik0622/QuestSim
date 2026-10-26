@@ -9,7 +9,7 @@ public sealed record ActorState(string Id, string Name, double X, double Z, doub
 public sealed record SupplyState(string Id, string ItemId, double X, double Z, int Count);
 public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
 public sealed record BuildReceipt(string RequestId, string ActorId, string SiteId, bool Success, string Reason, int Cost);
-public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies);
+public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies, ulong WorldSeed);
 
 public sealed class CharacterRecord
 {
@@ -25,7 +25,8 @@ public sealed class CharacterRecord
 
 public sealed class WorldSave
 {
-    public const string Content = "questsim:q02b-room-v1", Panel = "questsim:wall-panel";
+    public const string Content = "questsim:city-v1", Panel = "questsim:wall-panel";
+    public const ulong DefaultSeed = 20261026;
     // Fixed content: each crate's initial stock; the build cell's single panel wall.
     public static readonly SupplyState[] InitialSupplies =
     {
@@ -33,25 +34,34 @@ public sealed class WorldSave
         new("questsim:panel-crate", Panel, -3, 1.5, 2)
     };
     public static readonly BlockRecord BuildSite = new("questsim:build-cell-1", -4, 1.5, 1, .25, 2);
-    [JsonRequired] public int Version { get; set; } = 3;
+    [JsonRequired] public int Version { get; set; } = 4;
     [JsonRequired] public string ContentId { get; set; } = Content;
     [JsonRequired] public long Tick { get; set; }
-    [JsonRequired] public double HalfExtent { get; set; } = 6;
+    [JsonRequired] public double HalfExtent { get; set; } = CityGen.Half;
+    [JsonRequired] public ulong WorldSeed { get; set; } = DefaultSeed;
+    [JsonRequired] public int Generator { get; set; } = CityGen.Version;
     [JsonRequired] public List<SupplyState> Supplies { get; set; } = InitialSupplies.ToList();
     [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<BuildReceipt> BuildReceipts { get; set; } = new();
     [JsonRequired] public List<CharacterRecord> Characters { get; set; } = new();
-    [JsonRequired] public List<BlockRecord> Blocks { get; set; } = new()
+    [JsonRequired] public List<BlockRecord> Blocks { get; set; } = new List<BlockRecord>
     {
         new("questsim:wall-north", 0, -3.5, .25, 5, 2.8),
         new("questsim:wall-south", 0, 3.5, .25, 5, 2.8),
         new("questsim:module", -2, 2, 1, 1, 1)
+    }.Concat(Perimeter).ToList();
+    // Since v4 the starter room is an enclosed building in the city plaza, with a door on the south side (x 2..4).
+    public static readonly BlockRecord[] Perimeter =
+    {
+        new("questsim:wall-east", 6, 0, .25, 12, 2.8), new("questsim:wall-west", -6, 0, .25, 12, 2.8),
+        new("questsim:wall-north-outer", 0, -6, 12, .25, 2.8),
+        new("questsim:wall-south-west", -2, 6, 8, .25, 2.8), new("questsim:wall-south-east", 5, 6, 2, .25, 2.8)
     };
 }
 
 public sealed class WorldAuthority
 {
-    public const int ProtocolVersion = 3;
+    public const int ProtocolVersion = 4;
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;
@@ -61,7 +71,8 @@ public sealed class WorldAuthority
     private readonly Dictionary<int, (long Sequence, double X, double Z, double Heading, long Expires)> intents = new();
     private long snapshotSequence;
 
-    public WorldAuthority(WorldSave state) { WorldStorage.Validate(state); State = state; }
+    public CityGen City { get; }
+    public WorldAuthority(WorldSave state) { WorldStorage.Validate(state); State = state; City = new CityGen(state.WorldSeed); }
 
     public CharacterRecord Join(int peer, string profileId, string name)
     {
@@ -179,21 +190,34 @@ public sealed class WorldAuthority
     public bool IsSafe(double x, double z, string exceptId = "") =>
         double.IsFinite(x) && double.IsFinite(z) && Math.Abs(x) <= State.HalfExtent - Radius && Math.Abs(z) <= State.HalfExtent - Radius &&
         State.Supplies.All(s => Math.Abs(x - s.X) >= .3 + Radius || Math.Abs(z - s.Z) >= .3 + Radius) &&
-        State.Blocks.All(b => Clear(x, z, b)) &&
+        State.Blocks.All(b => Clear(x, z, b)) && ClearOfBuildings(x, z) &&
         active.Values.All(c => c.Id == exceptId || (x - c.X) * (x - c.X) + (z - c.Z) * (z - c.Z) >= .36);
+
+    bool ClearOfBuildings(double x, double z)
+    {
+        int cx = (int)Math.Floor(x / CityGen.ChunkSize), cz = (int)Math.Floor(z / CityGen.ChunkSize);
+        for (int dx = -1; dx <= 1; dx++)
+            for (int dz = -1; dz <= 1; dz++)
+                foreach (var b in City.Chunk(cx + dx, cz + dz))
+                    if (Math.Abs(x - b.X) < b.Width / 2.0 + Radius && Math.Abs(z - b.Z) < b.Depth / 2.0 + Radius) return false;
+        return true;
+    }
 
     private (double X, double Z) FindSafe(double x, double z, string id)
     {
         if (IsSafe(x, z, id)) return (x, z);
-        var candidates = from gx in Enumerable.Range(-5, 11) from gz in Enumerable.Range(-5, 11)
-                         orderby (gx - x) * (gx - x) + (gz - z) * (gz - z), gx, gz
-                         select (X: (double)gx, Z: (double)gz);
+        // Nearest free whole-metre spot around the character, then inside the starter room.
+        var candidates = (from gx in Enumerable.Range(-5, 11) from gz in Enumerable.Range(-5, 11)
+                          select (X: Math.Round(x) + gx, Z: Math.Round(z) + gz))
+                         .OrderBy(p => (p.X - x) * (p.X - x) + (p.Z - z) * (p.Z - z)).ThenBy(p => p.X).ThenBy(p => p.Z)
+                         .Concat(from gx in Enumerable.Range(-5, 11) from gz in Enumerable.Range(-5, 11)
+                                 orderby gx * gx + gz * gz, gx, gz select (X: (double)gx, Z: (double)gz));
         foreach (var p in candidates) if (IsSafe(p.X, p.Z, id)) return p;
         throw new InvalidOperationException("No safe re-entry position in this room");
     }
 
     public WorldSnapshot Snapshot() => new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent,
-        State.Blocks.ToArray(), active.Values.OrderBy(c => c.Id).Select(c => new ActorState(c.Id, c.Name, c.X, c.Z, c.Heading)).ToArray(), State.Supplies.ToArray());
+        State.Blocks.ToArray(), active.Values.OrderBy(c => c.Id).Select(c => new ActorState(c.Id, c.Name, c.X, c.Z, c.Heading)).ToArray(), State.Supplies.ToArray(), State.WorldSeed);
 }
 
 public static class WorldStorage
@@ -221,12 +245,24 @@ public static class WorldStorage
             root["Supplies"] = new JsonArray(supply, JsonSerializer.SerializeToNode(WorldSave.InitialSupplies[1]));
             root["BuildReceipts"] = new JsonArray();
             root["Version"] = 3;
+            root["ContentId"] = "questsim:q02b-room-v1";
+        }
+        if (root["Version"]?.GetValue<int>() == 3)
+        {
+            if (root["ContentId"]?.GetValue<string>() != "questsim:q02b-room-v1") throw new InvalidDataException("Unsupported v3 content");
+            var blocks = root["Blocks"] as JsonArray ?? throw new InvalidDataException("Missing v3 blocks");
+            var ids = blocks.Select(b => b?["Id"]?.GetValue<string>()).ToHashSet();
+            foreach (var wall in WorldSave.Perimeter.Where(w => !ids.Contains(w.Id))) blocks.Add(JsonSerializer.SerializeToNode(wall));
+            root["HalfExtent"] = CityGen.Half;
+            root["WorldSeed"] = WorldSave.DefaultSeed;
+            root["Generator"] = CityGen.Version;
+            root["Version"] = 4;
             root["ContentId"] = WorldSave.Content;
         }
         var world = JsonSerializer.Deserialize<WorldSave>(root.ToJsonString(), JsonOptions) ?? throw new InvalidDataException("Empty world save");
         Validate(world);
         // Validate first; backup is immutable and created before any v3 save can replace the original.
-        if (from is 1 or 2) File.Copy(path, path + $".v{from}-" + Guid.NewGuid().ToString("N") + ".bak", overwrite: false);
+        if (from is 1 or 2 or 3) File.Copy(path, path + $".v{from}-" + Guid.NewGuid().ToString("N") + ".bak", overwrite: false);
         return world;
     }
     public static void Save(string path, WorldSave world)
@@ -247,8 +283,8 @@ public static class WorldStorage
     }
     public static void Validate(WorldSave w)
     {
-        if (w.Version != 3 || w.ContentId != WorldSave.Content) throw new InvalidDataException("Unsupported world save version/content");
-        if (w.Tick < 0 || !double.IsFinite(w.HalfExtent) || w.HalfExtent != 6 || w.Characters is null || w.Blocks is null)
+        if (w.Version != 4 || w.ContentId != WorldSave.Content || w.Generator != CityGen.Version) throw new InvalidDataException("Unsupported world save version/content/generator");
+        if (w.Tick < 0 || !double.IsFinite(w.HalfExtent) || w.HalfExtent != CityGen.Half || w.Characters is null || w.Blocks is null)
             throw new InvalidDataException("Invalid world data");
         if (w.Characters.Any(c => c is null || string.IsNullOrEmpty(c.Id) || !c.Id.StartsWith("actor:") || !Guid.TryParseExact(c.Id[6..], "N", out _) ||
             !Guid.TryParseExact(c.ProfileId, "N", out _) || string.IsNullOrWhiteSpace(c.Name) || c.Name.Length > 24 ||

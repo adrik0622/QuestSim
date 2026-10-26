@@ -23,6 +23,7 @@ public partial class Session : Node
     private long? testSequence;
     private Profile profile = null!;
     private string profilePath = "", capturePath = "";
+    private Key[] heldKeys = [];
     private PickupReceipt? lastPickup;
     private BuildReceipt? lastBuild;
     private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
@@ -46,6 +47,7 @@ public partial class Session : Node
         public string SiteId { get; set; } = "";
         public bool RetryBuild { get; set; }
         public string[] Keys { get; set; } = [];
+        public string[] HoldKeys { get; set; } = [];
         public string Capture { get; set; } = "";
     }
 
@@ -419,6 +421,10 @@ public partial class Session : Node
             Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true });
             Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
         }
+        // Held keys stay down until the next command, for continuous inputs such as camera tilt.
+        foreach (var key in heldKeys) Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
+        heldKeys = command.HoldKeys.Select(name => Enum.Parse<Key>(name, ignoreCase: true)).ToArray();
+        foreach (var key in heldKeys) Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true });
         if (command.Capture.Length > 0) capturePath = Path.GetFullPath(command.Capture, Workspace);
         if (command.Quit) GetTree().Quit();
     }

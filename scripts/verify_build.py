@@ -171,7 +171,7 @@ def run_migration():
         f.command('legacy',retryPickup=True)
         assert reply(f,'legacy',request)==receipt
         migrated=read(f.save)
-        assert migrated['Version']==3 and migrated['Blocks']==original['Blocks'] and migrated['Receipts']==[receipt]
+        assert migrated['Version']==4 and migrated['Blocks'][:len(original['Blocks'])]==original['Blocks'] and len(migrated['Blocks'])==len(original['Blocks'])+5 and migrated['Receipts']==[receipt]
         print('PASS real Q02a save and profile migrate with exact backup; saved bandage replay unchanged',flush=True)
         take_panel(f,'legacy')
         build=uuid.uuid4().hex; f.command('legacy',buildRequestId=build)

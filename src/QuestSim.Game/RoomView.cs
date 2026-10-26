@@ -13,6 +13,10 @@ public partial class RoomView : Node3D
     private bool roomBuilt;
     private readonly Dictionary<string, (MeshInstance3D Box, Label3D Label)> supplies = new();
     private readonly HashSet<string> blocks = new();
+    private CityGen? city;
+    private readonly Dictionary<(int, int), Node3D> chunks = new();
+    private (int, int)? centreChunk;
+    private const int ChunkRadius = 4;
     public event Action? PickupRequested, BuildRequested, RetryRequested;
 
     public override void _Ready()
@@ -36,8 +40,17 @@ public partial class RoomView : Node3D
     }
     private void BuildRoom(WorldSnapshot state)
     {
-        float side = (float)state.HalfExtent * 2;
-        Box(this, new Vector3(0, -.1f, 0), new Vector3(side, .2f, side), new Color(.25f, .28f, .3f));
+        Box(this, new Vector3(0, -.1f, 0), new Vector3(12, .2f, 12), new Color(.25f, .28f, .3f));
+        city = new CityGen(state.WorldSeed);
+        var ground = new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.Half * 2, CityGen.Half * 2) }, Position = new Vector3(0, -.05f, 0),
+            MaterialOverride = new StandardMaterial3D { AlbedoColor = new Color(.35f, .5f, .25f), Roughness = 1 } };
+        AddChild(ground);
+        foreach (var road in city.Roads)
+        {
+            var from = new Vector3(road.X1, 0, road.Z1); var to = new Vector3(road.X2, 0, road.Z2);
+            var strip = Box(this, (from + to) / 2 + new Vector3(0, -.03f, 0), new Vector3(CityGen.RoadHalfWidth * 2, .02f, from.DistanceTo(to)), new Color(.2f, .2f, .22f));
+            strip.Rotation = new Vector3(0, Mathf.Atan2(to.X - from.X, to.Z - from.Z), 0);
+        }
         var site = WorldSave.BuildSite; // Floor marker for the one build cell.
         Box(this, new Vector3((float)site.X, .01f, (float)site.Z), new Vector3((float)site.Width, .02f, (float)site.Depth + .3f), new Color(.85f, .55f, .3f));
         foreach (var supply in state.Supplies)
@@ -48,6 +61,46 @@ public partial class RoomView : Node3D
         }
         roomBuilt = true;
     }
+    // Keep the chunks around the local player built; generated identically to the server from the world seed.
+    private void StreamChunks(Vector3 position)
+    {
+        var centre = ((int)Mathf.Floor(position.X / CityGen.ChunkSize), (int)Mathf.Floor(position.Z / CityGen.ChunkSize));
+        if (city is null || centreChunk == centre) return;
+        centreChunk = centre;
+        var wanted = new HashSet<(int, int)>();
+        for (int dx = -ChunkRadius; dx <= ChunkRadius; dx++)
+            for (int dz = -ChunkRadius; dz <= ChunkRadius; dz++) wanted.Add((centre.Item1 + dx, centre.Item2 + dz));
+        foreach (var key in chunks.Keys.Except(wanted).ToArray()) { chunks[key].QueueFree(); chunks.Remove(key); }
+        foreach (var key in wanted.Except(chunks.Keys).ToArray()) chunks[key] = BuildChunk(key.Item1, key.Item2);
+    }
+
+    private Node3D BuildChunk(int cx, int cz)
+    {
+        var node = new Node3D { Name = $"Chunk_{cx}_{cz}" };
+        AddChild(node);
+        int x0 = cx * CityGen.ChunkSize, z0 = cz * CityGen.ChunkSize, half = CityGen.ChunkSize / 2;
+        var biome = city!.BiomeAt(x0 + half, z0 + half);
+        if (biome != Biome.Field)
+        {
+            var colour = biome switch { Biome.Urban => new Color(.3f, .31f, .33f), Biome.Town => new Color(.42f, .4f, .35f), _ => new Color(.17f, .33f, .17f) };
+            node.AddChild(new MeshInstance3D { Mesh = new PlaneMesh { Size = new Vector2(CityGen.ChunkSize, CityGen.ChunkSize) }, Position = new Vector3(x0 + half, -.04f, z0 + half),
+                MaterialOverride = new StandardMaterial3D { AlbedoColor = colour, Roughness = 1 } });
+        }
+        var buildings = city.Chunk(cx, cz);
+        if (buildings.Length == 0) return node;
+        var multi = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, Mesh = new BoxMesh { Size = Vector3.One } };
+        multi.InstanceCount = buildings.Length;
+        for (int i = 0; i < buildings.Length; i++)
+        {
+            var b = buildings[i];
+            multi.SetInstanceTransform(i, new Transform3D(Basis.FromScale(new Vector3(b.Width, b.Height, b.Depth)), new Vector3(b.X, b.Height / 2f, b.Z)));
+            float shade = .45f + (CityGen.Mix((uint)(b.X * 73856093 ^ b.Z * 19349663)) % 100) / 400f;
+            multi.SetInstanceColor(i, b.Height > 18 ? new Color(shade * .8f, shade * .85f, shade) : new Color(shade, shade * .9f, shade * .75f));
+        }
+        node.AddChild(new MultiMeshInstance3D { Multimesh = multi, MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = .9f } });
+        return node;
+    }
+
     private Node3D CreateActor(ActorState state, bool local)
     {
         var actor = new Node3D { Position = new Vector3((float)state.X, 0, (float)state.Z) };
@@ -101,6 +154,7 @@ public partial class RoomView : Node3D
             actor.Rotation = new Vector3(0, (float)a.Heading, 0);
             actor.Visible = !local || !firstPerson;
             if (!local) continue;
+            StreamChunks(actor.Position);
             Vector3 eye = actor.Position + new Vector3(0, 1.65f, 0);
             if (firstPerson) { camera.Position = eye; camera.Rotation = new Vector3(.65f - elevation, Yaw, 0); }
             else

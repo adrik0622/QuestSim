@@ -48,5 +48,28 @@ public static class CityChecks
                 if (seen.Add(next)) queue.Enqueue(next);
         check(seen.Count == settlements.Count && settlements.Count(s => s.Spawn) == 1 && settlements.Count > 100,
             $"{settlements.Count} population settlements (city districts + towns) form one connected road network");
+
+        var world = new WorldAuthority(new WorldSave());
+        var tower = Enumerable.Range(0, 3).SelectMany(cx => world.City.Chunk(cx, 0)).First();
+        check(!world.IsSafe(tower.X, tower.Z) && world.IsSafe(60, 0) && !world.IsSafe(6, 0) && world.IsSafe(3, 6.5),
+            "server collision includes generated buildings and the enclosed starter room, with a south door");
+        string dir = Path.Combine(Path.GetTempPath(), "questsim-city-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(dir, "world.json");
+        try
+        {
+            WorldStorage.Save(path, world.State);
+            var v3 = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            v3["Version"] = 3; v3["ContentId"] = "questsim:q02b-room-v1"; v3["HalfExtent"] = 6;
+            v3.Remove("WorldSeed"); v3.Remove("Generator");
+            var blocks = v3["Blocks"]!.AsArray();
+            foreach (var wall in blocks.Where(b => WorldSave.Perimeter.Any(w => w.Id == b!["Id"]!.GetValue<string>())).ToArray()) blocks.Remove(wall);
+            string original = v3.ToJsonString(); File.WriteAllText(path, original);
+            var migrated = WorldStorage.Load(path);
+            string backup = Directory.GetFiles(dir, "world.json.v3-*.bak").Single();
+            check(File.ReadAllText(backup) == original && migrated.Version == 4 && migrated.WorldSeed == WorldSave.DefaultSeed &&
+                  WorldSave.Perimeter.All(w => migrated.Blocks.Count(b => b == w) == 1) && migrated.HalfExtent == CityGen.Half,
+                "Q02b v3 save migrates to the city once, with an exact backup and the room enclosed");
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
     }
 }
