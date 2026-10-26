@@ -1,11 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 
 namespace QuestSim.Domain;
 
 public sealed record BlockRecord(string Id, double X, double Z, double Width, double Depth, double Height);
 public sealed record ActorState(string Id, string Name, double X, double Z, double Heading);
-public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors);
+public sealed record SupplyState(string Id, string ItemId, double X, double Z, int Count);
+public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
+public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState Supply);
 
 public sealed class CharacterRecord
 {
@@ -21,10 +24,12 @@ public sealed class CharacterRecord
 
 public sealed class WorldSave
 {
-    [JsonRequired] public int Version { get; set; } = 1;
-    [JsonRequired] public string ContentId { get; set; } = "questsim:q01-room-v1";
+    [JsonRequired] public int Version { get; set; } = 2;
+    [JsonRequired] public string ContentId { get; set; } = "questsim:q02-room-v1";
     [JsonRequired] public long Tick { get; set; }
     [JsonRequired] public double HalfExtent { get; set; } = 6;
+    [JsonRequired] public SupplyState Supply { get; set; } = new("questsim:starter-crate", "questsim:bandage", -3, -1.5, 1);
+    [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<CharacterRecord> Characters { get; set; } = new();
     [JsonRequired] public List<BlockRecord> Blocks { get; set; } = new()
     {
@@ -36,7 +41,7 @@ public sealed class WorldSave
 
 public sealed class WorldAuthority
 {
-    public const int ProtocolVersion = 1;
+    public const int ProtocolVersion = 2;
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;
@@ -68,6 +73,38 @@ public sealed class WorldAuthority
         return character;
     }
 
+    public CharacterRecord CharacterFor(int peer) => active.TryGetValue(peer, out var character)
+        ? character : throw new InvalidOperationException("Character is not connected");
+
+    public PickupReceipt TakeItem(int peer, string requestId, string containerId)
+    {
+        var character = CharacterFor(peer);
+        if (!Guid.TryParseExact(requestId, "N", out var guid) || string.IsNullOrWhiteSpace(containerId) || containerId.Length > 128)
+            throw new ArgumentException("Invalid pickup request");
+        requestId = guid.ToString("N");
+        var previous = State.Receipts.SingleOrDefault(r => r.ActorId == character.Id && r.RequestId == requestId);
+        if (previous is not null)
+        {
+            if (previous.ContainerId != containerId) throw new InvalidOperationException("Request ID reused for a different target");
+            return previous;
+        }
+        var supply = State.Supply;
+        int held = character.Inventory.GetValueOrDefault(supply.ItemId);
+        string reason = containerId != supply.Id ? "unknown_container" :
+            Math.Pow(character.X - supply.X, 2) + Math.Pow(character.Z - supply.Z, 2) > 4 ? "out_of_reach" :
+            supply.Count == 0 ? "empty" : held == int.MaxValue ? "inventory_full" : "taken";
+        bool success = reason == "taken";
+        var receipt = new PickupReceipt(requestId, character.Id, containerId, supply.ItemId, success, reason, success ? 1 : 0);
+        // One synchronous domain operation; the server saves all three changes before replying.
+        if (success)
+        {
+            State.Supply = supply with { Count = supply.Count - 1 };
+            character.Inventory[supply.ItemId] = held + 1;
+        }
+        State.Receipts.Add(receipt);
+        return receipt;
+    }
+
     public bool Leave(int peer) { intents.Remove(peer); return active.Remove(peer); }
 
     public bool SetIntent(int peer, long sequence, double x, double z, double heading)
@@ -97,6 +134,7 @@ public sealed class WorldAuthority
 
     public bool IsSafe(double x, double z, string exceptId = "") =>
         double.IsFinite(x) && double.IsFinite(z) && Math.Abs(x) <= State.HalfExtent - Radius && Math.Abs(z) <= State.HalfExtent - Radius &&
+        (Math.Abs(x - State.Supply.X) >= .3 + Radius || Math.Abs(z - State.Supply.Z) >= .3 + Radius) &&
         State.Blocks.All(b => Math.Abs(x - b.X) >= b.Width / 2 + Radius || Math.Abs(z - b.Z) >= b.Depth / 2 + Radius) &&
         active.Values.All(c => c.Id == exceptId || (x - c.X) * (x - c.X) + (z - c.Z) * (z - c.Z) >= .36);
 
@@ -111,7 +149,7 @@ public sealed class WorldAuthority
     }
 
     public WorldSnapshot Snapshot() => new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent,
-        State.Blocks.ToArray(), active.Values.OrderBy(c => c.Id).Select(c => new ActorState(c.Id, c.Name, c.X, c.Z, c.Heading)).ToArray());
+        State.Blocks.ToArray(), active.Values.OrderBy(c => c.Id).Select(c => new ActorState(c.Id, c.Name, c.X, c.Z, c.Heading)).ToArray(), State.Supply);
 }
 
 public static class WorldStorage
@@ -120,8 +158,21 @@ public static class WorldStorage
     public static WorldSave Load(string path)
     {
         if (!File.Exists(path)) return new WorldSave();
-        var world = JsonSerializer.Deserialize<WorldSave>(File.ReadAllText(path), JsonOptions) ?? throw new InvalidDataException("Empty world save");
+        string original = File.ReadAllText(path);
+        var root = JsonNode.Parse(original) as JsonObject ?? throw new InvalidDataException("Empty world save");
+        bool migrate = root["Version"]?.GetValue<int>() == 1;
+        if (migrate)
+        {
+            if (root["ContentId"]?.GetValue<string>() != "questsim:q01-room-v1") throw new InvalidDataException("Unsupported v1 content");
+            root["Version"] = 2;
+            root["ContentId"] = "questsim:q02-room-v1";
+            root["Supply"] = JsonSerializer.SerializeToNode(new WorldSave().Supply);
+            root["Receipts"] = new JsonArray();
+        }
+        var world = JsonSerializer.Deserialize<WorldSave>(root.ToJsonString(), JsonOptions) ?? throw new InvalidDataException("Empty world save");
         Validate(world);
+        // Validate first; backup is immutable and created before any v2 save can replace v1.
+        if (migrate) File.Copy(path, path + ".v1-" + Guid.NewGuid().ToString("N") + ".bak", overwrite: false);
         return world;
     }
     public static void Save(string path, WorldSave world)
@@ -142,7 +193,7 @@ public static class WorldStorage
     }
     public static void Validate(WorldSave w)
     {
-        if (w.Version != 1 || w.ContentId != "questsim:q01-room-v1") throw new InvalidDataException("Unsupported world save version/content");
+        if (w.Version != 2 || w.ContentId != "questsim:q02-room-v1") throw new InvalidDataException("Unsupported world save version/content");
         if (w.Tick < 0 || !double.IsFinite(w.HalfExtent) || w.HalfExtent != 6 || w.Characters is null || w.Blocks is null)
             throw new InvalidDataException("Invalid world data");
         if (w.Characters.Any(c => c is null || string.IsNullOrEmpty(c.Id) || !c.Id.StartsWith("actor:") || !Guid.TryParseExact(c.Id[6..], "N", out _) ||
@@ -157,5 +208,16 @@ public static class WorldStorage
             b.Width <= 0 || b.Depth <= 0 || b.Height <= 0 || b.Width > 12 || b.Depth > 12 || b.Height > 6) ||
             w.Blocks.Select(b => b.Id).Distinct().Count() != w.Blocks.Count)
             throw new InvalidDataException("Invalid/duplicate world block data");
+        var supply = w.Supply;
+        if (supply is null || supply.Id != "questsim:starter-crate" || supply.ItemId != "questsim:bandage" ||
+            !double.IsFinite(supply.X) || !double.IsFinite(supply.Z) || Math.Abs(supply.X) > 5.5 || Math.Abs(supply.Z) > 5.5 || supply.Count is < 0 or > 1 || w.Receipts is null)
+            throw new InvalidDataException("Invalid supply data");
+        if (w.Receipts.Any(r => r is null || !Guid.TryParseExact(r.RequestId, "N", out var guid) || r.RequestId != guid.ToString("N") ||
+            !w.Characters.Any(c => c.Id == r.ActorId) || string.IsNullOrWhiteSpace(r.ContainerId) || r.ContainerId.Length > 128 || r.ItemId != supply.ItemId ||
+            (r.Success ? r.Quantity != 1 || r.Reason != "taken" : r.Quantity != 0 || r.Reason is not ("empty" or "out_of_reach" or "unknown_container" or "inventory_full"))) ||
+            w.Receipts.Select(r => (r.ActorId, r.RequestId)).Distinct().Count() != w.Receipts.Count)
+            throw new InvalidDataException("Invalid/duplicate pickup receipts");
+        if (w.Receipts.Count(r => r.Success) != 1 - supply.Count || w.Receipts.Any(r => r.Success && r.ContainerId != supply.Id))
+            throw new InvalidDataException("Supply and pickup receipts disagree");
     }
 }

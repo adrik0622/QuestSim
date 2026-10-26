@@ -1,6 +1,7 @@
 # QuestSim implementation state
 
-2026-10-25: Q01 two-client acceptance complete; stop at this increment's boundary.
+2026-10-25: Q01 complete; Q02a atomic item pickup now authorized.
+Baseline: 237c943 pushed and verified at origin/main; clean on entry.
 Working presentation: low-poly 3D, first/third-person. One flat room for this test;
 broader world structure remains open. Q00 lab/evidence remain intact.
 
@@ -28,7 +29,8 @@ Test telemetry now waits for asynchronous server
 status refresh; it previously sampled stale status. Raw failed runs retained.
 
 Checkpoints: 63b8ad5 domain/persistence; 320becd real ENet server/clients;
-current HEAD records final GUI/docs/evidence (verify with `git log --oneline`). No remote/push; all changes local.
+current HEAD records final GUI/docs/evidence (verify with `git log --oneline`). Origin is git@github.com:adrik0622/QuestSim.git; main tracks origin/main.
+Periodic verified-checkpoint pushes authorized.
 Raw logs and disposable test saves/profiles: .artifacts/q01/ and .artifacts/logs/.
 Source/concise evidence versioned; no actual play save modified. Test children closed.
 
@@ -40,5 +42,5 @@ detection. No NPCs/combat/quests/item transfers/shared building; yellow module i
 static. Future rules remain in DIRECTOR.md. Long-term structure, target hardware
 and weekly capacity are still material open questions, not blockers to this room.
 
-One next action: Q02's first atomic item interaction, with two-client last-item race,
-request retry deduplication and persisted result. Do not begin it during this handoff.
+One next action: implement and verify one-item conservation, durable request
+receipts and backed-up Q01 save migration. CURRENT_TASK.md bounds Q02a.

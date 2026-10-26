@@ -60,7 +60,7 @@ public static class AuthorityChecks
             bool incomplete = false;
             try { WorldStorage.Load(path); } catch (System.Text.Json.JsonException) { incomplete = true; }
             check(incomplete, "missing save fields rejected instead of silently replacing world");
-            File.WriteAllText(path, valid.Replace("\"Version\": 1", "\"Version\": 999"));
+            File.WriteAllText(path, valid.Replace("\"Version\": 2", "\"Version\": 999"));
             bool rejected = false;
             try { WorldStorage.Load(path); } catch (InvalidDataException) { rejected = true; }
             check(rejected && File.ReadAllText(path).Contains("999"), "unsupported save rejected without overwriting original");
