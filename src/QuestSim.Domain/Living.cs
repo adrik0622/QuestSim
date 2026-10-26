@@ -10,7 +10,6 @@ public sealed class Npc
     public double X, Z, Heading, WanderX, WanderZ;
     public int Health, Cooldown;
     public bool Dead, Wandering;
-    public bool Hostile => Zombie || Faction == Population.Hostile;
 }
 
 public sealed partial class WorldAuthority
@@ -47,8 +46,10 @@ public sealed partial class WorldAuthority
         if (populationTask is { IsCompleted: false }) { PopulationLagged++; return; }
         populationTask?.GetAwaiter().GetResult();
         SyncTiers();
-        if (synchronous) Pop!.Step();
-        else populationTask = Task.Run(Pop!.Step);
+        PrepareRumors();
+        var rumors = RumorInput();
+        if (synchronous) Pop!.Step(rumors);
+        else populationTask = Task.Run(() => Pop!.Step(rumors));
     }
 
     public void WaitForPopulation() => populationTask?.GetAwaiter().GetResult();
@@ -126,7 +127,7 @@ public sealed partial class WorldAuthority
             if (npc.Dead) continue;
             if (npc.Cooldown > 0) npc.Cooldown--;
             CharacterRecord? prey = null;
-            if (npc.Hostile)
+            if (IsHostile(npc))
             {
                 double sight = npc.Zombie ? 18 : 25;
                 prey = players.Where(p => !IsCaptive(p) && Distance(p.X, p.Z, npc.X, npc.Z) <= sight).OrderBy(p => Distance(p.X, p.Z, npc.X, npc.Z)).ThenBy(p => p.Id).FirstOrDefault();

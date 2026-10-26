@@ -20,6 +20,7 @@ public partial class RoomView : Node3D
     private const int ChunkRadius = 4;
     public event Action? PickupRequested, BuildRequested, RetryRequested;
     public event Action<string>? AttackRequested;
+    public event Action? AskRequested;
 
     public override void _Ready()
     {
@@ -155,8 +156,9 @@ public partial class RoomView : Node3D
         Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move | Q/E turn | Up/Down tilt | C/R camera | F take | B build | T retry | V melee | G shoot\n" +
-            $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s\n" +
+            "WASD move | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask\n" +
+            $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s" +
+            string.Concat((state?.Factions ?? []).Where(f => f.Id < 3).Select(f => $" | {f.Name} {f.Standing:+0;-0}")) + "\n" +
             $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
             $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}" +
             string.Concat((state?.Opportunities ?? []).Take(3).Select(o => $"\n• {o.Text}"));
@@ -203,6 +205,7 @@ public partial class RoomView : Node3D
         if (key.Keycode == Key.T) RetryRequested?.Invoke();
         if (key.Keycode == Key.V) AttackRequested?.Invoke("melee");
         if (key.Keycode == Key.G) AttackRequested?.Invoke("shoot");
+        if (key.Keycode == Key.H) AskRequested?.Invoke();
         if (key.Keycode == Key.C) firstPerson = !firstPerson;
         if (key.Keycode == Key.R) { Yaw = -Mathf.Pi / 2; elevation = .65f; }
     }

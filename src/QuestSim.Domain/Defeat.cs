@@ -132,6 +132,7 @@ public sealed partial class WorldAuthority
         captive.Conditions.Remove(Captive);
         AddFact("rescued", captive.Id, rescuer.Id, captive.X, captive.Z);
         Claim("rescue", captive.Id, rescuer);
+        AdjustStanding(0, 10);
         return "rescued";
     }
 
@@ -156,11 +157,16 @@ public sealed partial class WorldAuthority
     void OnKilled(CharacterRecord killer, Npc npc)
     {
         AddFact("kill", killer.Id, $"npc:{npc.Index}", npc.X, npc.Z);
+        if (!npc.Zombie) AdjustStanding(npc.Faction, npc.Faction == Population.Hostile ? 0 : -25);
+        if (npc.Faction == Population.Hostile) AdjustStanding(0, 2);
         var named = State.Named.FirstOrDefault(n => n.Index == npc.Index);
         if (named is null) return;
         TransferAll($"npc:{npc.Index}", killer.Id, "avenged");   // the victor's carried gear, including the victim's
         foreach (var o in State.Opportunities.Where(o => o.Status == "open" && o.Kind == "revenge" && o.Target == $"npc:{npc.Index}").ToArray())
+        {
             Claim(o, killer);
+            AdjustStanding(0, 15); AdjustStanding(1, 10);
+        }
     }
 
     // ---- Virtual Game Master: deterministic rules over facts; creations are committed, shared and claimable once. ----

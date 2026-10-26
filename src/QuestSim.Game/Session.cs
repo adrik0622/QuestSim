@@ -28,6 +28,7 @@ public partial class Session : Node
     private BuildReceipt? lastBuild;
     private AttackResult? lastAttack;
     private string lastInteract = "";
+    private AskResult? lastAsk;
     private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
@@ -53,6 +54,7 @@ public partial class Session : Node
         public string Capture { get; set; } = "";
         public string Attack { get; set; } = "";
         public string Interact { get; set; } = "";
+        public bool Ask { get; set; }
     }
 
     public override void _Ready()
@@ -126,6 +128,7 @@ public partial class Session : Node
                     view.PickupRequested += Interact;
                     view.BuildRequested += () => RequestBuild(false);
                     view.AttackRequested += kind => RequestAttack(kind);
+                    view.AskRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestAsk)); };
                     view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
                 }
             }
@@ -327,6 +330,23 @@ public partial class Session : Node
         network.Close();
     }
 
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RequestAsk()
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        try { RpcId(peer, nameof(AskReply), JsonSerializer.Serialize(authority.Ask(peer))); }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("ASK_REJECTED ", e.Message); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void AskReply(string json)
+    {
+        if (server) return;
+        lastAsk = JsonSerializer.Deserialize<AskResult>(json, WorldStorage.JsonOptions);
+        itemMessage = lastAsk is null || lastAsk.Reason == "nobody" ? "Nobody close enough to ask." : $"{lastAsk.Speaker}: \"{string.Join(" ", lastAsk.Lines.Take(2))}\"";
+    }
+
     private void RequestAttack(string kind)
     {
         if (connected && own is not null) RpcId(1, nameof(Attack), kind);
@@ -521,6 +541,7 @@ public partial class Session : Node
             RequestPickup(command.RetryPickup, command.PickupRequestId, command.ContainerId);
         if (command.Attack.Length > 0) RequestAttack(command.Attack);
         if (command.Interact.Length > 0) RpcId(1, nameof(RequestInteract), command.Interact);
+        if (command.Ask) RpcId(1, nameof(RequestAsk));
         if (command.BuildRequestId.Length > 0 || command.RetryBuild)
             RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
         // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.
@@ -555,7 +576,7 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract,
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
             npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64

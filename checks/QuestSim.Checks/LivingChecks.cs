@@ -11,6 +11,12 @@ public static class LivingChecks
         var pop = w.Pop!;
         uint i = (uint)Enumerable.Range(0, pop.Count).First(k => Population.IsZombie(pop.Info[k]) == zombie &&
             (faction < 0 || Population.FactionOf(pop.Info[k]) == faction) && (pop.Info[k] & (Population.Detailed | Population.Dead)) == 0);
+        return SummonIndex(w, i, x, z);
+    }
+
+    internal static Npc SummonIndex(WorldAuthority w, uint i, double x, double z)
+    {
+        var pop = w.Pop!;
         pop.PosX[i] = pop.TgtX[i] = Population.ToMm(x); pop.PosZ[i] = pop.TgtZ[i] = Population.ToMm(z);
         pop.Step();   // rebuild the grid with the moved agent (it walks at most one coarse step)
         pop.PosX[i] = pop.TgtX[i] = Population.ToMm(x); pop.PosZ[i] = pop.TgtZ[i] = Population.ToMm(z);

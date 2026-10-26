@@ -43,6 +43,25 @@ def run_combat():
         assert killed, results
         wait(lambda: all(a['Id'] != killed for a in f.status('alice')['snapshot']['Actors']), 'dead NPC removed from snapshot')
         passed(f'aimed pistol shots spend one round each and kill an NPC ({shots} shots: {", ".join(results)})')
+        # Leave the starter room (east through the partition, south out of the door), then ask the nearest friendly NPC.
+        f.command('alice', 1, 0); wait(lambda: me(f, 'alice')['X'] > 2.8, 'reach door column', 15)
+        f.command('alice', 0, 1); wait(lambda: me(f, 'alice')['Z'] > 8, 'out of the room', 15)
+        def friendly():
+            mine = me(f, 'alice')
+            people = [n for n in npcs(f, 'alice') if n['Kind'] == 1 and n['Faction'] != 2]
+            return min(people, key=lambda n: math.hypot(n['X'] - mine['X'], n['Z'] - mine['Z'])) if people else None
+        deadline = time.monotonic() + 40
+        while time.monotonic() < deadline:
+            target, mine = friendly(), me(f, 'alice')
+            if target is None: time.sleep(.3); continue
+            dx, dz = target['X'] - mine['X'], target['Z'] - mine['Z']; d = math.hypot(dx, dz)
+            if d < 2.2: break
+            f.command('alice', dx / d, dz / d); time.sleep(.2)
+        f.command('alice'); time.sleep(.3)
+        f.command('alice', ask=True)
+        answer = wait(lambda: (a := f.status('alice')['lastAsk']) and a, 'ask reply')
+        assert answer['Reason'] in ('rumors', 'nothing') and answer['Speaker'], answer
+        passed(f"walking up to an NPC and asking returns what that NPC has heard ({answer['Speaker']}: {answer['Lines'][0]})")
         f.close('alice'); wait(lambda: f.status('server')['active'] == 0, 'alice absent')
         deltas = f.status('server')['agentDeltas']
         f.close('server', server=True)

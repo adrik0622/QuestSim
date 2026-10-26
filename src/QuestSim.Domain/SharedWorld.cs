@@ -45,7 +45,7 @@ public sealed record SupplyState(string Id, string ItemId, double X, double Z, i
 public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
 public sealed record BuildReceipt(string RequestId, string ActorId, string SiteId, bool Success, string Reason, int Cost);
 public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies, ulong WorldSeed,
-    Opportunity[]? Opportunities = null, LootCache[]? Caches = null);
+    Opportunity[]? Opportunities = null, LootCache[]? Caches = null, FactionInfo[]? Factions = null);
 
 public sealed class CharacterRecord
 {
@@ -291,7 +291,8 @@ public sealed partial class WorldAuthority
                 IsCaptive(a) ? "captive" : a.Conditions.ContainsKey(Infected) ? "infected" : a.Conditions.ContainsKey(Injured) ? "injured" : ""))
             .Concat(NpcsVisibleTo(viewer, peer is null)).ToArray();
         return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed,
-            State.Opportunities.Where(o => o.Status == "open").ToArray(), State.Caches.Where(k => k.Inventory.Count > 0).ToArray());
+            State.Opportunities.Where(o => o.Status == "open").ToArray(), State.Caches.Where(k => k.Inventory.Count > 0).ToArray(),
+            Pop is null ? null : Factions().ToArray());
     }
 }
 

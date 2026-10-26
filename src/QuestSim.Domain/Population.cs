@@ -80,16 +80,94 @@ public sealed class Population
     public static bool IsZombie(uint info) => (info & Zombie) != 0;
     public static int FactionOf(uint info) => (int)((info >> 24) & 15);
 
-    public void Step()
+    // Rumor inputs decided by the authority (credibility 16-bit per slot, trust 16-bit per faction pair), and outputs it reads back.
+    public sealed record RumorInput(uint[] Credibility, uint[] Trust, uint ActiveLo, uint ActiveHi, uint FadeThreshold);
+    public uint[] Carriers { get; } = new uint[64];
+    public long[] Members { get; } = new long[16];
+    public const uint ContactRadius = 30_000;
+
+    public void Step() => Step(null);
+
+    public void Step(RumorInput? rumors)
     {
         uint tick = Tick;
-        Parallel.ForEach(Partitioner.Create(0, Count, Math.Max(4096, Count / (Environment.ProcessorCount * 4))), range =>
-        {
-            for (int i = range.Item1; i < range.Item2; i++) Move((uint)i, tick);
-        });
+        var partitions = Partitioner.Create(0, Count, Math.Max(4096, Count / (Environment.ProcessorCount * 4)));
+        Parallel.ForEach(partitions, range => { for (int i = range.Item1; i < range.Item2; i++) Move((uint)i, tick); });
         BuildGrid();
+        var carriers = new uint[64];
+        var members = new long[16];
+        bool spreading = rumors is not null && (rumors.ActiveLo | rumors.ActiveHi) != 0;
+        Parallel.ForEach(partitions, () => (Carriers: new uint[64], Members: new long[16]), (range, _, local) =>
+        {
+            for (int i = range.Item1; i < range.Item2; i++)
+            {
+                uint info = Info[i];
+                if ((info & Dead) == 0) local.Members[FactionOf(info)]++;
+                if (spreading) Spread((uint)i, tick, rumors!, local.Carriers);
+                else
+                {
+                    nextLo[i] = MaskLo[i]; nextHi[i] = MaskHi[i];
+                    for (uint m = MaskLo[i]; m != 0; m &= m - 1) local.Carriers[BitOperations.TrailingZeroCount(m)]++;
+                    for (uint m = MaskHi[i]; m != 0; m &= m - 1) local.Carriers[32 + BitOperations.TrailingZeroCount(m)]++;
+                }
+            }
+            return local;
+        }, local => { lock (carriers) for (int k = 0; k < 64; k++) { carriers[k] += local.Carriers[k]; } lock (members) for (int k = 0; k < 16; k++) members[k] += local.Members[k]; });
+        Array.Copy(nextLo, MaskLo, Count); Array.Copy(nextHi, MaskHi, Count);
+        Array.Copy(carriers, Carriers, 64); Array.Copy(members, Members, 16);
         Tick++;
     }
+
+    // E1 spread rule: reads previous masks only, deterministic per (agent, neighbour, rumor), so thread order never matters.
+    void Spread(uint i, uint tick, RumorInput r, uint[] carriers)
+    {
+        uint info = Info[i];
+        if (IsZombie(info) || (info & Dead) != 0) { nextLo[i] = 0; nextHi[i] = 0; return; }
+        uint x = PosX[i], z = PosZ[i], faction = (uint)FactionOf(info) & 7, oldLo = MaskLo[i], oldHi = MaskHi[i], heardLo = 0, heardHi = 0;
+        uint cx = x >> 16, cz = z >> 16;
+        ulong c2 = (ulong)ContactRadius * ContactRadius;
+        for (int oz = -1; oz <= 1; oz++)
+            for (int ox = -1; ox <= 1; ox++)
+                for (uint b = heads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; b != None; b = next[b])
+                {
+                    uint binfo = Info[b];
+                    if (b == i || IsZombie(binfo)) continue;
+                    long dx = (long)PosX[b] - x, dz = (long)PosZ[b] - z;
+                    if ((ulong)(dx * dx + dz * dz) > c2) continue;
+                    uint trust = r.Trust[faction * 8 + ((uint)FactionOf(binfo) & 7)];
+                    heardLo |= Listen(i, b, tick, MaskLo[b] & ~oldLo & r.ActiveLo, 0, trust, r.Credibility);
+                    heardHi |= Listen(i, b, tick, MaskHi[b] & ~oldHi & r.ActiveHi, 32, trust, r.Credibility);
+                }
+        uint newLo = (Forget(i, tick, oldLo, 0, r.FadeThreshold) | heardLo) & r.ActiveLo, newHi = (Forget(i, tick, oldHi, 32, r.FadeThreshold) | heardHi) & r.ActiveHi;
+        nextLo[i] = newLo; nextHi[i] = newHi;
+        for (uint m = newLo; m != 0; m &= m - 1) carriers[BitOperations.TrailingZeroCount(m)]++;
+        for (uint m = newHi; m != 0; m &= m - 1) carriers[32 + BitOperations.TrailingZeroCount(m)]++;
+    }
+
+    uint Listen(uint i, uint b, uint tick, uint candidates, uint @base, uint trust, uint[] credibility)
+    {
+        uint heard = 0;
+        for (uint m = candidates; m != 0; m &= m - 1)
+        {
+            uint r = @base + (uint)BitOperations.TrailingZeroCount(m);
+            if (Hash4((uint)Seed, tick, i, Mix(b) ^ (0x400 + r)) < credibility[r] * trust) heard |= 1u << (int)(r - @base);
+        }
+        return heard;
+    }
+
+    uint Forget(uint i, uint tick, uint bits, uint @base, uint threshold)
+    {
+        uint keep = bits;
+        for (uint m = bits; m != 0; m &= m - 1)
+        {
+            uint r = @base + (uint)BitOperations.TrailingZeroCount(m);
+            if (Hash4((uint)Seed, tick, i, 0x800 + r) < threshold) keep &= ~(1u << (int)(r - @base));
+        }
+        return keep;
+    }
+
+    public bool Knows(uint i, int slot) => slot < 32 ? (MaskLo[i] & (1u << slot)) != 0 : (MaskHi[i] & (1u << (slot - 32))) != 0;
+    public void Tell(uint i, int slot) { if (slot < 32) MaskLo[i] |= 1u << slot; else MaskHi[i] |= 1u << (slot - 32); }
 
     void Move(uint i, uint tick)
     {

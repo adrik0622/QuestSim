@@ -41,3 +41,4 @@ BuildChecks.Run(Check);
 CityChecks.Run(Check);
 LivingChecks.Run(Check);
 DefeatChecks.Run(Check);
+RumorChecks.Run(Check);
