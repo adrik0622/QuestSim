@@ -22,6 +22,11 @@ public sealed class Population
     public int[] SettlementFaction { get; }
     readonly uint[] settleX, settleZ, adjOff, adj;
 
+    // Game clock at 48:1: one population tick is 48 game seconds; the world starts at 08:00 on day one.
+    public static double GameHour(double gameSeconds) => (8 + gameSeconds / 3600) % 24;
+    public static bool Night(double hour) => hour >= 22 || hour < 6;
+    public const uint NightRadius = 40_000;
+
     public static uint ToMm(double metres) => (uint)Math.Clamp((long)Math.Round((metres + CityGen.Half) * 1000), 0, 2L * CityGen.Half * 1000);
     public static double ToMetres(uint mm) => mm / 1000.0 - CityGen.Half;
     public static uint Mix(uint x) => CityGen.Mix(x);
@@ -217,7 +222,7 @@ public sealed class Population
                 tx = Offset(settleX[target], Hash4((uint)Seed, tick, i, 5), HordeSpread);
                 tz = Offset(settleZ[target], Hash4((uint)Seed, tick, i, 6), HordeSpread);
             }
-            else if (!travelling && adjOff[anchor + 1] > adjOff[anchor] && Hash4((uint)Seed, tick, i, 1) % 100 < 3)
+            else if (!travelling && !Night(GameHour(tick * (double)GameSecondsPerTick)) && adjOff[anchor + 1] > adjOff[anchor] && Hash4((uint)Seed, tick, i, 1) % 100 < 3)
             {
                 uint count = adjOff[anchor + 1] - adjOff[anchor];
                 anchor = adj[adjOff[anchor] + Hash4((uint)Seed, tick, i, 2) % count];
@@ -227,8 +232,9 @@ public sealed class Population
             else
             {
                 travelling = false;
-                tx = Offset(settleX[anchor], Hash4((uint)Seed, tick, i, 3), WanderRadius);
-                tz = Offset(settleZ[anchor], Hash4((uint)Seed, tick, i, 4), WanderRadius);
+                uint radius = Night(GameHour(tick * (double)GameSecondsPerTick)) ? NightRadius : WanderRadius;   // home at night
+                tx = Offset(settleX[anchor], Hash4((uint)Seed, tick, i, 3), radius);
+                tz = Offset(settleZ[anchor], Hash4((uint)Seed, tick, i, 4), radius);
             }
         }
         PosX[i] = x; PosZ[i] = z; TgtX[i] = tx; TgtZ[i] = tz;

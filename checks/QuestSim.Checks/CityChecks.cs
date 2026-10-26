@@ -49,6 +49,19 @@ public static class CityChecks
         check(seen.Count == settlements.Count && settlements.Count(s => s.Spawn) == 1 && settlements.Count > 100,
             $"{settlements.Count} population settlements (city districts + towns) form one connected road network");
 
+        var pop = new Population(gen, 20_000);
+        double MeanHomeDistance()
+        {
+            var home = pop.Settlements;
+            return Enumerable.Range(0, pop.Count).Where(i => !Population.IsZombie(pop.Info[i]) && (pop.Info[i] & Population.Travelling) == 0)
+                .Average(i => { var s = home[(int)(pop.Info[i] & 0xFFFFFF)]; return Math.Abs(Population.ToMetres(pop.PosX[i]) - s.X) + Math.Abs(Population.ToMetres(pop.PosZ[i]) - s.Z); });
+        }
+        while (Population.GameHour(pop.Tick * 48.0) < 14) pop.Step();
+        double day = MeanHomeDistance();
+        while (!Population.Night(Population.GameHour(pop.Tick * 48.0)) || Population.GameHour(pop.Tick * 48.0) < 23.5) pop.Step();
+        double night = MeanHomeDistance();
+        check(night < day * .6, $"humans head home at night: mean distance from home {day:0} m at 14:00, {night:0} m at 23:30");
+
         var world = new WorldAuthority(new WorldSave());
         var tower = Enumerable.Range(0, 3).SelectMany(cx => world.City.Chunk(cx, 0)).First();
         check(!world.IsSafe(tower.X, tower.Z) && world.IsSafe(60, 0) && !world.IsSafe(6, 0) && world.IsSafe(3, 6.5),

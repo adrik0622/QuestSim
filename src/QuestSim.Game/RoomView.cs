@@ -9,6 +9,8 @@ public partial class RoomView : Node3D
     private bool firstPerson;
     private readonly Camera3D camera = new();
     private readonly Label hud = new();
+    private readonly DirectionalLight3D sun = new() { RotationDegrees = new Vector3(-55, -35, 0), ShadowEnabled = true };
+    private Godot.Environment? environment;
     private readonly ColorRect hudBack = new() { Color = new Color(.03f, .04f, .06f, .9f), Size = new Vector2(960, 100), MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Dictionary<string, Node3D> actors = new();
     private bool roomBuilt;
@@ -24,12 +26,13 @@ public partial class RoomView : Node3D
 
     public override void _Ready()
     {
-        AddChild(new WorldEnvironment { Environment = new Godot.Environment
+        environment = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Color, BackgroundColor = new Color(.12f, .17f, .23f),
             AmbientLightSource = Godot.Environment.AmbientSource.Color, AmbientLightColor = Colors.White, AmbientLightEnergy = .65f
-        } });
-        AddChild(new DirectionalLight3D { RotationDegrees = new Vector3(-55, -35, 0), ShadowEnabled = true });
+        };
+        AddChild(new WorldEnvironment { Environment = environment });
+        AddChild(sun);
         AddChild(camera); camera.Current = true; camera.Fov = 75;
         camera.Position = new Vector3(-8, 6, 0); camera.LookAt(new Vector3(0, 1, 0));
         var layer = new CanvasLayer(); AddChild(layer);
@@ -104,6 +107,19 @@ public partial class RoomView : Node3D
         return node;
     }
 
+    // World ticks are 20 per real second; at 48:1 each tick is 2.4 game seconds.
+    private void ApplyTimeOfDay(long tick)
+    {
+        double hour = Population.GameHour(tick / (double)WorldAuthority.TickRate * Population.GameSecondsPerTick);
+        float daylight = (float)Math.Clamp(Math.Sin((hour - 6) / 12 * Math.PI) * 1.4, 0, 1);
+        sun.LightEnergy = .15f + .85f * daylight;
+        sun.RotationDegrees = new Vector3(-10 - 60 * daylight, (float)(hour / 24 * 360), 0);
+        environment!.BackgroundColor = new Color(.02f, .03f, .06f).Lerp(new Color(.45f, .62f, .85f), daylight);
+        environment.AmbientLightEnergy = .25f + .45f * daylight;
+        clock = $"{(int)hour:00}:{(int)(hour % 1 * 60):00}";
+    }
+
+    private string clock = "";
     private readonly Dictionary<int, Node3D> caches = new();
     private static string Condition(WorldSnapshot? state, string ownId) =>
         state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Condition is { Length: > 0 } c ? $" ({c})" : "";
@@ -157,13 +173,14 @@ public partial class RoomView : Node3D
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
             "WASD move | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal\n" +
-            $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s" +
+            $"Present: {state?.Actors.Length ?? 0} | {clock}" +
             string.Concat((state?.Factions ?? []).Where(f => f.Id < 3).Select(f => $" | {f.Name} {f.Standing:+0;-0}")) + "\n" +
             $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
             $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}" +
             string.Concat((state?.Opportunities ?? []).Take(3).Select(o => $"\n• {o.Text}"));
         hudBack.Size = new Vector2(960, 100 + 22 * Math.Min(3, state?.Opportunities?.Length ?? 0));
         if (state is null) return;
+        ApplyTimeOfDay(state.Tick);
         if (!roomBuilt) BuildRoom(state);
         UpdateCaches(state);
         // Blocks only appear (no demolition yet); draw any the server added since the last snapshot.
