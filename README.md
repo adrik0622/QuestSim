@@ -12,8 +12,9 @@ bash scripts/run_presentation.sh 2d
 ```
 
 Godot 4.6.2 .NET and .NET 10.0.110 build and launch on the current Linux desktop.
-Use WASD, Q/E and arrows; C changes 3D camera, R resets, click selects/places the
-construction piece. No server or persistence yet.
+WASD moves; R resets; click selects/places the construction piece. The 2D camera
+is fixed. In 3D, Q/E turns/orbits, Up/Down tilts, and C switches first/third person.
+No server or persistence yet.
 
 [Comparison and evidence](questsim_planning_kit/PRESENTATION_EXPERIMENT.md) ·
 [Runbook](questsim_planning_kit/RUNBOOK.md) ·

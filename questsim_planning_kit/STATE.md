@@ -33,6 +33,12 @@ After full access the masked .git was absent; a real local Git repo was initiali
 `git log --oneline` verifies checkpoints; no remote/push. Code and concise evidence
 are versioned; tools/caches/raw logs remain ignored under .tools/.local/.artifacts.
 
+Follow-up: director observed inactive Q/E/arrows/C in the running 2D mode. That
+behavior is expected for a fixed overhead camera; the shared HUD was misleading.
+HUD now lists only available controls per mode (3D tilt is Up/Down, not all arrows).
+Build passes with zero warnings/errors; 2D and 3D HUD screenshots inspected.
+Existing director-owned 2D process left running; restart to load updated text.
+
 Known limits: third-person wall occlusion, billboard facing, placeholder animation,
 no camera collision/mouse-look/NPC collision. No release exports, other hardware,
 stacked floors, networking, persistence/reconnect or paused world clock tested.

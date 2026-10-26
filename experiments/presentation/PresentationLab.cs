@@ -214,7 +214,9 @@ public partial class PresentationLab : Node
             else if (axis.LengthSquared() > 0) blockedMoves++;
         UpdateVisuals();
         hud.Text = $"{mode} / {view} — four moving actors; 2m doorway; yellow 1m module\n" +
-            "WASD move | Q/E turn | arrows tilt | C first/third | R reset | click select/place | Esc cancel\n" +
+            (mode == "2d"
+                ? "Fixed overhead | WASD move | R reset | click select/place | Esc cancel\n"
+                : "WASD move | Q/E turn | Up/Down tilt | C first/third | R reset | click select/place | Esc cancel\n") +
             $"Player ({player.X:0.0}, {player.Y:0.0}) height {Height(player):0.00} | selected {selected} | {message}\n" +
             "Disposable control/animation proxies. NPCs do not collide; no multiplayer or production art.";
         if (benchmark && elapsed >= 10 && elapsed < 40) frames.Add(delta * 1000);

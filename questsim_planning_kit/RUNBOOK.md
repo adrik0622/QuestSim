@@ -48,7 +48,8 @@ Installed prerequisites follow the [official C# documentation](https://docs.godo
 
 ## Controls and scenario
 
-WASD moves; Q/E turns/orbits in 3D; arrows tilt; C switches first/third person;
+2D uses a fixed overhead camera: Q/E, arrows and C are inactive. In 3D, Q/E
+turns/orbits, Up/Down tilts, and C switches first/third person. WASD moves in both;
 R resets player/camera, retaining construction; Escape cancels selection. Click the
 yellow cube to select, then a ground cell to move it. Red preview rejects walls,
 actors, platforms and bounds. Space logs a state snapshot for acceptance assertions.

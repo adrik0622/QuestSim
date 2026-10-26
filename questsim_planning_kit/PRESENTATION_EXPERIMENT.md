@@ -88,7 +88,9 @@ raw metric JSON are retained under `experiments/presentation/evidence/` in Git.
 - [Third-person doorway occlusion](../experiments/presentation/evidence/verify-poly3d-doorway.png)
 
 RUNBOOK.md contains launch, desktop acceptance and benchmark commands. Sources are
-fingerprinted in `experiments/presentation/evidence/source.sha256`.
+fingerprinted in `experiments/presentation/evidence/source.sha256` at measurement
+commit `a1aacb1`. The subsequent mode-specific HUD clarification does not rebaseline
+these measurements.
 
 ## Decision and remaining limits
 
