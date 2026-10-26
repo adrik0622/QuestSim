@@ -12,6 +12,8 @@ public partial class Session : Node
     private RoomView? view;
     private WorldSnapshot? snapshot, world;
     private readonly Dictionary<long, string> sentWorld = new();
+    private readonly Dictionary<long, long> sentEconomyHour = new();
+    private SettlementInfo[]? settlements;   // client: the debug map's settlement table, updated once per game hour
     private long worldBytes, actorPacketBytes, sentCrowdVersion, crowdBytes;
     private int crowdCount;
     private CharacterRecord? own;
@@ -105,7 +107,7 @@ public partial class Session : Node
                 content.Require(save.Mods);   // refuse to run a world without a mod it was made with
                 save.Mods = save.Mods.Concat(content.Mods.Where(m => save.Mods.All(r => r.Id != m.Id))).ToList();
                 GD.Print("CONTENT mods=" + string.Join(",", content.Mods.Select(m => $"{m.Id}@{m.Version}")) + $" items={content.Items.Count}");
-                authority = new WorldAuthority(save) { Content = content };
+                authority = new WorldAuthority(save) { Content = content, DetailBudget = int.Parse(Option("detail-budget", "400")) };
                 authority.LoadPopulation(savePath);
                 populationSaveSeconds = double.Parse(Option("population-save-seconds", "60"), System.Globalization.CultureInfo.InvariantCulture);
                 GD.Print($"POPULATION agents={save.Population} load={authority.PopulationLoad}");
@@ -234,9 +236,20 @@ public partial class Session : Node
         if (server) return;
         var received = JsonSerializer.Deserialize<WorldSnapshot>(json, WorldStorage.JsonOptions) ?? throw new InvalidDataException("Empty world");
         if (received.Version != WorldAuthority.ProtocolVersion) { Disconnected("Incompatible snapshot version"); return; }
-        world = received;
+        world = received with { Settlements = settlements };
         worldBytes += json.Length;
         if (snapshot is not null) snapshot = world with { Actors = snapshot.Actors, Sequence = snapshot.Sequence, Tick = snapshot.Tick };
+    }
+
+    // The debug map's settlement table: reliable, once per game hour (and on joining).
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable, TransferChannel = 3)]
+    public void ReceiveSettlements(string json)
+    {
+        if (server) return;
+        settlements = JsonSerializer.Deserialize<SettlementInfo[]>(json, WorldStorage.JsonOptions);
+        worldBytes += json.Length;
+        if (world is not null) world = world with { Settlements = settlements };
+        if (snapshot is not null) snapshot = snapshot with { Settlements = settlements };
     }
 
     // Crowd placeholders: background people near you, about once per second, purely visual.
@@ -548,8 +561,16 @@ public partial class Session : Node
         snapshot = authority!.Snapshot();
         foreach (var (peer, _) in authority.ActivePeers)
         {
-            var view = authority.Snapshot(peer);
+            var view = authority.Snapshot(peer, settlements: false);
             string worldJson = JsonSerializer.Serialize(view with { Actors = [], Sequence = 0, Tick = 0 });
+            // The settlement table (~20 KB) changes once per game hour; it rode in the world JSON, which faction member counts
+            // change every second, costing every client ~24 KB/s.
+            long economyHour = authority.State.EconomyTicks / Economy.TicksPerHour;
+            if (authority.Pop is not null && sentEconomyHour.GetValueOrDefault(peer, -1) != economyHour)
+            {
+                RpcId(peer, nameof(ReceiveSettlements), JsonSerializer.Serialize(authority.SettlementInfos().ToArray()));
+                sentEconomyHour[peer] = economyHour;
+            }
             if (sentWorld.GetValueOrDefault(peer) != worldJson)
             {
                 RpcId(peer, nameof(ReceiveWorld), worldJson);
@@ -567,6 +588,7 @@ public partial class Session : Node
     private void OnPeerLeft(long peer)
     {
         sentWorld.Remove(peer);
+        sentEconomyHour.Remove(peer);
         if (authority is null || failed || !authority.Leave((int)peer)) return;
         try
         {
@@ -708,7 +730,7 @@ public partial class Session : Node
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
             characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk, lastInspect,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
-            npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
+            npcs = authority?.Npcs.Count, detailSwaps = authority?.DetailSwaps, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
             actorPacketBytes, worldBytes, crowdCount, crowdBytes, populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));

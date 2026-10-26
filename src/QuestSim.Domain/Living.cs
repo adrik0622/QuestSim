@@ -14,7 +14,8 @@ public sealed class Npc
 
 public sealed partial class WorldAuthority
 {
-    public const int PopulationEvery = TickRate, MaxDetailed = 400, MeleeCooldown = 12, ShotCooldown = 8;
+    public const int PopulationEvery = TickRate, MeleeCooldown = 12, ShotCooldown = 8;
+    public const double SwapRadius = 60;
     public const double PromoteRadius = 120, DemoteRadius = 180, ViewRadius = 120, MeleeReach = 1.8, ShotRange = 40;
     public const string Pistol = "questsim:pistol", Ammo = "questsim:ammo-9mm";
     readonly bool synchronous;
@@ -24,6 +25,7 @@ public sealed partial class WorldAuthority
     public Population? Pop { get; private set; }
     public IReadOnlyDictionary<uint, Npc> Npcs => npcs;
     public long PopulationLagged { get; private set; }
+    public long DetailSwaps { get; private set; }   // far full NPCs returned to the crowd for nearer people
     public Action<CharacterRecord, Npc>? Downed;
     public const double CrowdRadius = 200, BodySeconds = 90;
     public const int CrowdLimit = 1500, MaxBodies = 200;
@@ -38,6 +40,7 @@ public sealed partial class WorldAuthority
 
     // Nobody is promoted within this distance of a player, so new NPCs never pop in at arm's length.
     public double PromotionClearance { get; set; } = 20;
+    public int DetailBudget { get; set; } = 400;   // full NPCs shared by all players (server option --detail-budget)
 
     void StartPopulation()
     {
@@ -94,18 +97,35 @@ public sealed partial class WorldAuthority
             if (State.Tick >= body.Until || players.All(p => Distance(p.X, p.Z, body.Npc.X, body.Npc.Z) > DemoteRadius)) bodies.Remove(i);
         foreach (var i in bodies.OrderBy(b => b.Value.Until).ThenBy(b => b.Key).Take(Math.Max(0, bodies.Count - MaxBodies)).Select(b => b.Key).ToArray())
             bodies.Remove(i);
-        // Share the detail budget fairly: take each player's nearest candidates in turn.
-        var queues = players.Select(p => new Queue<uint>(pop.Near(p.X, p.Z, PromoteRadius).Where(i => !pop.Indoors(i))
-            .OrderBy(i => Distance(p.X, p.Z, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]))).ThenBy(i => i))).ToArray();
-        while (npcs.Count < MaxDetailed && queues.Any(q => q.Count > 0))
+        // Share the detail budget fairly: take each player's nearest candidates in turn. When it is full, the nearest people
+        // still win: a full NPC beyond SwapRadius of every player, and not mid-fight, goes back to the crowd (farthest first)
+        // to make room for someone nearer, so nobody next to a player is left a placeholder while slots sit far away.
+        double Nearest(double x, double z) => players.Min(p => Distance(p.X, p.Z, x, z));
+        var spare = new Queue<(Npc Npc, double Distance)>(npcs.Values.Where(n => !n.Dead && n.Cooldown == 0)
+            .Select(n => (Npc: n, Distance: Nearest(n.X, n.Z))).Where(n => n.Distance > SwapRadius)
+            .OrderByDescending(n => n.Distance).ThenBy(n => n.Npc.Index));
+        var queues = players.Select(p => new Queue<(uint Index, double Distance)>(pop.Near(p.X, p.Z, PromoteRadius).Where(i => !pop.Indoors(i))
+            .Select(i => (Index: i, Distance: Distance(p.X, p.Z, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]))))
+            .OrderBy(c => c.Distance).ThenBy(c => c.Index))).ToArray();
+        while (queues.Any(q => q.Count > 0) && (npcs.Count < DetailBudget || spare.Count > 0))
             foreach (var queue in queues)
             {
-                if (npcs.Count >= MaxDetailed || !queue.TryDequeue(out uint i)) continue;
+                if (!queue.TryDequeue(out var candidate)) continue;
+                uint i = candidate.Index;
                 if ((pop.Info[i] & (Population.Detailed | Population.Dead)) != 0) continue;
+                bool full = npcs.Count >= DetailBudget;
+                if (full && (spare.Count == 0 || spare.Peek().Distance <= candidate.Distance + 10)) continue;
                 double x = Population.ToMetres(pop.PosX[i]), z = Population.ToMetres(pop.PosZ[i]);
                 if (!FindWalkable(ref x, ref z)) continue;   // coarse agents ignore buildings; step out of one or stay coarse
                 if (PromotionClearance > 0 && active.Any(p => Distance(p.Value.X, p.Value.Z, x, z) < PromotionClearance &&
                     !(crowdShown.TryGetValue(p.Key, out var shown) && shown.Contains(i)))) continue;
+                if (full)
+                {
+                    var far = spare.Dequeue().Npc;
+                    pop.Info[far.Index] &= ~Population.Detailed;   // its position was written back at the top of this sync
+                    npcs.Remove(far.Index);
+                    DetailSwaps++;
+                }
                 var delta = State.AgentDeltas.FirstOrDefault(d => d.Index == i);
                 npcs[i] = new Npc
                 {

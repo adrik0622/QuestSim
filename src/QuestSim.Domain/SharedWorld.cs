@@ -123,7 +123,7 @@ public sealed class WorldSave
 
 public sealed partial class WorldAuthority
 {
-    public const int ProtocolVersion = 7;   // 5: crowd velocities, NPC bodies; 6: settlement economy; 7: faction relations and moves
+    public const int ProtocolVersion = 8;   // 5: crowd velocities, NPC bodies; 6: settlement economy; 7: faction relations; 8: settlements sent hourly
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;
@@ -293,7 +293,7 @@ public sealed partial class WorldAuthority
     }
 
     // Players are always included; NPCs only within view of the given peer (all detailed NPCs when peer is null).
-    public WorldSnapshot Snapshot(int? peer = null)
+    public WorldSnapshot Snapshot(int? peer = null, bool settlements = true)
     {
         var viewer = peer is int p && active.TryGetValue(p, out var c) ? c : null;
         var actors = active.Values.OrderBy(a => a.Id).Select(a => new ActorState(a.Id, a.Name, a.X, a.Z, a.Heading, 0, -1, a.Stat(CharacterRecord.Health),
@@ -301,7 +301,7 @@ public sealed partial class WorldAuthority
             .Concat(NpcsVisibleTo(viewer, peer is null)).ToArray();
         return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed,
             State.Opportunities.Where(o => o.Status == "open").ToArray(), State.Caches.Where(k => k.Inventory.Count > 0).ToArray(),
-            Pop is null ? null : Factions().ToArray(), Pop is null ? null : SettlementInfos().ToArray());
+            Pop is null ? null : Factions().ToArray(), Pop is null || !settlements ? null : SettlementInfos().ToArray());
     }
 }
 

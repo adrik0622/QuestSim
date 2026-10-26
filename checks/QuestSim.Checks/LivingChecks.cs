@@ -52,6 +52,17 @@ public static class LivingChecks
             foreach (var n in clear.Npcs.Values.Where(n => !had.Contains(n.Index) && FromCleo(n) < 20)) { closeIn++; onlyShown &= shown.Contains(n.Index); }
         }
         check(closeIn > 0 && onlyShown, $"only people already shown as placeholders become full NPCs inside 20 m ({closeIn} did, in place of their silhouettes)");
+        // A full budget still serves the nearest people: far full NPCs return to the crowd to make room.
+        var tight = new WorldAuthority(new WorldSave { Population = 20_000 }, synchronousPopulation: true) { PromotionClearance = 0, DetailBudget = 8 };
+        var tess = tight.Join(2, new string('d', 32), "Tess");
+        tess.X = 3; tess.Z = 30;
+        Steps(tight, WorldAuthority.PopulationEvery);
+        foreach (var n in tight.Npcs.Values) { n.X = tess.X + 100; n.Z = tess.Z; n.Wandering = true; n.WanderX = n.X; n.WanderZ = n.Z; }   // all slots far away
+        var newcomer = SummonIndex(tight, (uint)Enumerable.Range(0, tight.Pop!.Count).First(k => !Population.IsZombie(tight.Pop.Info[k]) &&
+            (tight.Pop.Info[k] & (Population.Detailed | Population.Dead)) == 0 && !tight.Pop.Indoors((uint)k)), tess.X + 12, tess.Z);
+        double FromTess(Npc n) => Math.Sqrt((n.X - tess.X) * (n.X - tess.X) + (n.Z - tess.Z) * (n.Z - tess.Z));
+        check(tight.Npcs.Count == 8 && tight.Npcs.ContainsKey(newcomer.Index) && tight.DetailSwaps > 0 && tight.Npcs.Values.Count(n => FromTess(n) < 50) >= 1,
+            $"with the detail budget full, someone 12 m away replaces a full NPC 100 m away ({tight.DetailSwaps} swaps)");
         check(w.Npcs.Count > 0 && w.Npcs.Values.All(n => Math.Sqrt((n.X - alice.X) * (n.X - alice.X) + (n.Z - alice.Z) * (n.Z - alice.Z)) <= WorldAuthority.PromoteRadius + 13) &&
               w.Npcs.Keys.All(i => (w.Pop.Info[i] & Population.Detailed) != 0),
             $"agents near a player are promoted to 20 Hz detail ({w.Npcs.Count} near the plaza)");
