@@ -40,7 +40,7 @@ public sealed partial class WorldAuthority
 
     // Nobody is promoted within this distance of a player, so new NPCs never pop in at arm's length.
     public double PromotionClearance { get; set; } = 20;
-    public int DetailBudget { get; set; } = 400;   // full NPCs shared by all players (server option --detail-budget)
+    public int DetailBudget { get; set; } = 600;   // full NPCs shared by all players (server option --detail-budget)
 
     void StartPopulation()
     {

@@ -39,7 +39,7 @@ try:
     status = f.status('server')
     rate = (status['tick'] - t0) / (time.monotonic() - start)
     mean = sum(sizes) / len(sizes)
-    result = {'players': PLAYERS, 'population': f.population, 'detailBudget': int(BUDGET or 400), 'detailSwaps': status.get('detailSwaps'), 'ticksPerSecond': round(rate, 2), 'populationLagged': status['populationLagged'],
+    result = {'players': PLAYERS, 'population': f.population, 'detailBudget': int(BUDGET or 600), 'detailSwaps': status.get('detailSwaps'), 'ticksPerSecond': round(rate, 2), 'populationLagged': status['populationLagged'],
               'detailedNpcs': status['npcs'], 'meanVisibleNpcs': round(sum(npc_counts) / len(npc_counts), 1),
               'meanActorPacketBytes': round(mean), 'meanActorsAsJsonBytes': round(sum(json_sizes) / len(json_sizes)),
               'worldJsonBytesPerSecond': round(world_rate), 'approxDownloadKiBps': round((mean * 10 + world_rate) / 1024, 1),

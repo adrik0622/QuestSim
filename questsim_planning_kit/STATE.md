@@ -112,7 +112,9 @@ unrest), they trade and raid and recover by day ~35. 156 domain checks.
 --detail-budget; measured with 8 players and 1M agents: 400 -> 97 KiB/s per client, 600 -> 94
 KiB/s after moving the settlement table out of the world JSON (it had cost ~24 KB/s per client),
 both 20 ticks/s with no lag on Linux and on whitetop (Ryzen 5 2600). At 600 everyone near the
-plaza is a full NPC. Default stays 400 until the director picks.
+plaza is a full NPC. Director chose 600 as the default (2026-10-26).
+
+Handoff for the next session: HANDOFF_2026-10-26.md (state, machines, lessons, road to v1.0).
 
 Next action: director playtest of F19/F19b/F20 (M map, rumors such as "A great horde is
 moving on ...", faction news), or F21 (caravans and raid parties as travelling groups players

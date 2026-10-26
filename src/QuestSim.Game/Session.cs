@@ -107,7 +107,7 @@ public partial class Session : Node
                 content.Require(save.Mods);   // refuse to run a world without a mod it was made with
                 save.Mods = save.Mods.Concat(content.Mods.Where(m => save.Mods.All(r => r.Id != m.Id))).ToList();
                 GD.Print("CONTENT mods=" + string.Join(",", content.Mods.Select(m => $"{m.Id}@{m.Version}")) + $" items={content.Items.Count}");
-                authority = new WorldAuthority(save) { Content = content, DetailBudget = int.Parse(Option("detail-budget", "400")) };
+                authority = new WorldAuthority(save) { Content = content, DetailBudget = int.Parse(Option("detail-budget", "600")) };
                 authority.LoadPopulation(savePath);
                 populationSaveSeconds = double.Parse(Option("population-save-seconds", "60"), System.Globalization.CultureInfo.InvariantCulture);
                 GD.Print($"POPULATION agents={save.Population} load={authority.PopulationLoad}");
