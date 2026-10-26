@@ -131,3 +131,29 @@ public sealed partial class WorldAuthority
         _ => $"Something happened {Place(f.X, f.Z)}."
     };
 }
+
+public sealed partial class WorldAuthority
+{
+    public const double InspectReach = 10;
+
+    // I: a debugging view of the nearest NPC (generated identity, state, carried items, beliefs). Read-only.
+    public string[] Inspect(int peer)
+    {
+        var c = CharacterFor(peer);
+        var npc = npcs.Values.Where(n => !n.Dead && Distance(n.X, n.Z, c.X, c.Z) <= InspectReach)
+            .OrderBy(n => Distance(n.X, n.Z, c.X, c.Z)).ThenBy(n => n.Index).FirstOrDefault();
+        if (npc is null || Pop is null) return ["Nobody within 10 m to inspect."];
+        var named = State.Named.FirstOrDefault(n => n.Index == npc.Index);
+        var home = Pop.Settlements[(int)(Pop.Info[npc.Index] & 0xFFFFFF) % Pop.Settlements.Count];
+        var beliefs = Enumerable.Range(0, 64).Where(s => slotFact[s] >= 0 && Pop.Knows(npc.Index, s)).Select(s => Describe(State.Facts[slotFact[s]])).ToArray();
+        return
+        [
+            $"{DisplayName(npc)} (npc:{npc.Index}) - {(npc.Zombie ? "zombie" : "human")}, {Population.FactionNames[npc.Faction]}" +
+                (npc.Zombie ? "" : $", standing {Standing(npc.Faction):+0;-0}") + (IsHostile(npc) ? ", HOSTILE" : ""),
+            $"Health {npc.Health}; at ({npc.X:0}, {npc.Z:0}); " + (npc.Zombie ? $"horde {Pop.Info[npc.Index] & 0xFFFFFF}" : $"home settlement {home.Index} at ({home.X}, {home.Z})"),
+            named is null ? "Unremarkable (generated, nothing stored)." :
+                $"Named: \"{named.Title}\", {named.Victories} victories, +{named.BonusHealth} health, carrying {(named.Inventory.Count == 0 ? "nothing" : string.Join(", ", named.Inventory.Select(i => $"{i.Key.Split(':')[1]} {i.Value}")))}",
+            beliefs.Length == 0 ? "Has heard nothing worth telling." : $"Has heard {beliefs.Length}: {beliefs[0]}"
+        ];
+    }
+}

@@ -81,6 +81,9 @@ public static class RumorChecks
                 "a damaged population file is detected by hash and falls back to seed + deltas; deaths still hold");
         }
         finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+        var inspected = w.Inspect(3);
+        check(inspected.Length == 4 && inspected[0].Contains("npc:") && inspected[1].StartsWith("Health"),
+            $"I inspects the nearest NPC: \"{inspected[0]}\" / \"{inspected[3]}\"");
         var factions = w.Snapshot(3).Factions!;
         check(factions.Length == 5 && factions.Where(f => f.Id < 3).Sum(f => f.Members) > 20_000 && factions.Single(f => f.Id == 2).Standing == -100,
             "snapshots report faction standing and living member counts from the population");

@@ -33,6 +33,7 @@ public partial class Session : Node
     private AttackResult? lastAttack;
     private string lastInteract = "";
     private AskResult? lastAsk;
+    private string lastInspect = "";
     private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
@@ -60,6 +61,7 @@ public partial class Session : Node
         public string Interact { get; set; } = "";
         public bool Ask { get; set; }
         public bool Use { get; set; }
+        public bool Inspect { get; set; }
     }
 
     public override void _Ready()
@@ -150,6 +152,7 @@ public partial class Session : Node
                     view.AttackRequested += kind => RequestAttack(kind);
                     view.AskRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestAsk)); };
                     view.UseRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestUse), ""); };
+                    view.InspectRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestInspect)); };
                     view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
                 }
             }
@@ -376,6 +379,23 @@ public partial class Session : Node
             RpcId(peer, nameof(InteractReply), "use", result, JsonSerializer.Serialize(authority.CharacterFor(peer).Inventory));
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("USE_REJECTED ", e.Message); }
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RequestInspect()
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        try { RpcId(peer, nameof(InspectReply), string.Join("\n", authority.Inspect(peer))); }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("INSPECT_REJECTED ", e.Message); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void InspectReply(string text)
+    {
+        if (server) return;
+        lastInspect = text;
+        view?.ShowInspection(text);
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -632,6 +652,7 @@ public partial class Session : Node
         if (command.Interact.Length > 0) RpcId(1, nameof(RequestInteract), command.Interact);
         if (command.Ask) RpcId(1, nameof(RequestAsk));
         if (command.Use) RpcId(1, nameof(RequestUse), "");
+        if (command.Inspect) RpcId(1, nameof(RequestInspect));
         if (command.BuildRequestId.Length > 0 || command.RetryBuild)
             RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
         // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.
@@ -666,7 +687,7 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk,
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk, lastInspect,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
             npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
             actorPacketBytes, worldBytes, populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),

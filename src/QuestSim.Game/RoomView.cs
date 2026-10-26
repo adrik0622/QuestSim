@@ -22,7 +22,10 @@ public partial class RoomView : Node3D
     private const int ChunkRadius = 4;
     public event Action? PickupRequested, BuildRequested, RetryRequested;
     public event Action<string>? AttackRequested;
-    public event Action? AskRequested, UseRequested;
+    public event Action? AskRequested, UseRequested, InspectRequested;
+    private readonly Label inspector = new() { Position = new Vector2(12, 430), Visible = false };
+    private double inspectorSeconds;
+    public void ShowInspection(string text) { inspector.Text = text; inspector.Visible = true; inspectorSeconds = 8; }
 
     public override void _Ready()
     {
@@ -38,6 +41,7 @@ public partial class RoomView : Node3D
         var layer = new CanvasLayer(); AddChild(layer);
         layer.AddChild(hudBack);
         hud.Position = new Vector2(12, 8); hud.AddThemeFontSizeOverride("font_size", 17); layer.AddChild(hud);
+        inspector.AddThemeFontSizeOverride("font_size", 15); inspector.AddThemeColorOverride("font_color", new Color(1, .95f, .6f)); layer.AddChild(inspector);
     }
     private static MeshInstance3D Box(Node3D parent, Vector3 p, Vector3 size, Color color)
     {
@@ -191,13 +195,14 @@ public partial class RoomView : Node3D
         Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal\n" +
+            "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal | I inspect\n" +
             $"Present: {state?.Actors.Length ?? 0} | {clock}" +
             string.Concat((state?.Factions ?? []).Where(f => f.Id < 3).Select(f => $" | {f.Name} {f.Standing:+0;-0}")) + "\n" +
             $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
             $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}" +
             string.Concat((state?.Opportunities ?? []).Take(3).Select(o => $"\n• {o.Text}"));
         hudBack.Size = new Vector2(960, 100 + 22 * Math.Min(3, state?.Opportunities?.Length ?? 0));
+        if ((inspectorSeconds -= delta) <= 0) inspector.Visible = false;
         if (state is null) return;
         ApplyTimeOfDay(state.Tick);
         if (!roomBuilt) BuildRoom(state);
@@ -244,6 +249,7 @@ public partial class RoomView : Node3D
         if (key.Keycode == Key.G) AttackRequested?.Invoke("shoot");
         if (key.Keycode == Key.H) AskRequested?.Invoke();
         if (key.Keycode == Key.U) UseRequested?.Invoke();
+        if (key.Keycode == Key.I) InspectRequested?.Invoke();
         if (key.Keycode == Key.C) firstPerson = !firstPerson;
         if (key.Keycode == Key.R) { Yaw = -Mathf.Pi / 2; elevation = .65f; }
     }
