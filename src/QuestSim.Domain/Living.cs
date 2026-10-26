@@ -71,10 +71,13 @@ public sealed partial class WorldAuthority
                 npcs.Remove(i);
             }
         }
-        foreach (var player in players)
-            foreach (uint i in pop.Near(player.X, player.Z, PromoteRadius))
+        // Share the detail budget fairly: take each player's nearest candidates in turn.
+        var queues = players.Select(p => new Queue<uint>(pop.Near(p.X, p.Z, PromoteRadius)
+            .OrderBy(i => Distance(p.X, p.Z, Population.ToMetres(pop.PosX[i]), Population.ToMetres(pop.PosZ[i]))).ThenBy(i => i))).ToArray();
+        while (npcs.Count < MaxDetailed && queues.Any(q => q.Count > 0))
+            foreach (var queue in queues)
             {
-                if (npcs.Count >= MaxDetailed) return;
+                if (npcs.Count >= MaxDetailed || !queue.TryDequeue(out uint i)) continue;
                 if ((pop.Info[i] & (Population.Detailed | Population.Dead)) != 0) continue;
                 double x = Population.ToMetres(pop.PosX[i]), z = Population.ToMetres(pop.PosZ[i]);
                 if (!FindWalkable(ref x, ref z)) continue;   // coarse agents ignore buildings; step out of one or stay coarse
