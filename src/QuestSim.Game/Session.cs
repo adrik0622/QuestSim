@@ -24,6 +24,8 @@ public partial class Session : Node
     private Profile profile = null!;
     private string profilePath = "", capturePath = "";
     private Key[] heldKeys = [];
+    private double populationSaveSeconds = 60, populationElapsed;
+    private Task<(string Name, string Hash)>? populationWrite;
     private PickupReceipt? lastPickup;
     private BuildReceipt? lastBuild;
     private AttackResult? lastAttack;
@@ -89,6 +91,9 @@ public partial class Session : Node
                     save.StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 24 };
                 }
                 authority = new WorldAuthority(save);
+                authority.LoadPopulation(savePath);
+                populationSaveSeconds = double.Parse(Option("population-save-seconds", "60"), System.Globalization.CultureInfo.InvariantCulture);
+                GD.Print($"POPULATION agents={save.Population} load={authority.PopulationLoad}");
                 network.SetBindIP(Option("bind", "127.0.0.1"));
                 error = network.CreateServer(port, 8);
                 Multiplayer.PeerDisconnected += OnPeerLeft;
@@ -507,6 +512,7 @@ public partial class Session : Node
                 }
                 authority.PendingKicks.Clear();
                 if (frame % 2 == 0) Publish();
+                SavePopulationInBackground(delta);
                 saveElapsed += delta;
                 if (saveElapsed >= 2 && authority.ActiveCount > 0) { WorldStorage.Save(savePath, authority.State); saveElapsed = 0; }
             }
@@ -530,6 +536,34 @@ public partial class Session : Node
         }
         catch (Exception e) { Fail(e); }
     }
+    // Capture between coarse ticks, write off the main thread, then reference it from the next world save.
+    private void SavePopulationInBackground(double delta)
+    {
+        if (authority?.Pop is null) return;
+        populationElapsed += delta;
+        if (populationWrite is { IsCompleted: true })
+        {
+            var (name, hash) = populationWrite.GetAwaiter().GetResult();
+            populationWrite = null;
+            authority.CommitPopulation(name, hash);
+            WorldStorage.Save(savePath, authority.State);
+            WorldAuthority.PrunePopulationFiles(savePath, name);
+            GD.Print($"POPULATION_SAVED file={name}");
+        }
+        if (populationWrite is null && authority.CapturedPopulation is not null)
+        {
+            var bytes = authority.TakeCapturedPopulation()!;
+            uint tick = authority.CapturedPopulationTick;
+            string path = savePath;
+            populationWrite = Task.Run(() => (WorldAuthority.WritePopulationFile(path, tick, bytes), WorldAuthority.Hash(bytes)));
+        }
+        else if (populationWrite is null && populationElapsed >= populationSaveSeconds && authority.ActiveCount > 0)
+        {
+            authority.PopulationSaveRequested = true;
+            populationElapsed = 0;
+        }
+    }
+
     private void ReadTestIntent()
     {
         if (!File.Exists(intentPath)) return;
@@ -578,7 +612,8 @@ public partial class Session : Node
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
             characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
-            npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count, itemMessage, fps = Engine.GetFramesPerSecond(),
+            npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
+            populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));
     }
@@ -591,7 +626,21 @@ public partial class Session : Node
     }
     public override void _ExitTree()
     {
-        try { if (serverStarted && authority is not null && savePath.Length > 0) WorldStorage.Save(savePath, authority.State); }
+        try
+        {
+            if (serverStarted && authority is not null && savePath.Length > 0)
+            {
+                populationWrite?.GetAwaiter().GetResult();
+                if (authority.CapturePopulationNow() is { } bytes)
+                {
+                    string name = WorldAuthority.WritePopulationFile(savePath, authority.Pop!.Tick, bytes);
+                    authority.CommitPopulation(name, WorldAuthority.Hash(bytes));
+                    WorldStorage.Save(savePath, authority.State);
+                    WorldAuthority.PrunePopulationFiles(savePath, name);
+                }
+                WorldStorage.Save(savePath, authority.State);
+            }
+        }
         catch (Exception e) { GD.PushError("Final save failed: " + e.Message); GetTree().Quit(1); }
         if (server) Console.CancelKeyPress -= OnCancelKeyPress;
         network?.Close();

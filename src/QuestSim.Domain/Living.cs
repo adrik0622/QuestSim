@@ -47,6 +47,7 @@ public sealed partial class WorldAuthority
         populationTask?.GetAwaiter().GetResult();
         SyncTiers();
         PrepareRumors();
+        if (PopulationSaveRequested) CapturePopulation();
         var rumors = RumorInput();
         if (synchronous) Pop!.Step(rumors);
         else populationTask = Task.Run(() => Pop!.Step(rumors));

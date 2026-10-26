@@ -88,6 +88,8 @@ public sealed class WorldSave
     public List<AgentDelta> AgentDeltas { get; set; } = new();  // stored differences from the generated population
     public Dictionary<string, int> StartingKit { get; set; } = new();
     public bool Permadeath { get; set; }
+    public string PopulationFile { get; set; } = "";   // committed population snapshot beside the save, and its SHA-256
+    public string PopulationHash { get; set; } = "";
     public List<Fact> Facts { get; set; } = new();
     public List<ItemTransfer> Transfers { get; set; } = new();
     public List<Opportunity> Opportunities { get; set; } = new();

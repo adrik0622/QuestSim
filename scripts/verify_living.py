@@ -20,7 +20,7 @@ def npcs(f, label):
 
 
 def run_combat():
-    f = NetworkFixture('living'); f.population = 100_000
+    f = NetworkFixture('living'); f.population = 100_000; f.server_args = ['--population-save-seconds=3']
     try:
         f.launch('server'); f.ready('server', 0)
         f.launch('alice', 'alice'); f.ready('alice')
@@ -64,14 +64,19 @@ def run_combat():
         passed(f"walking up to an NPC and asking returns what that NPC has heard ({answer['Speaker']}: {answer['Lines'][0]})")
         f.close('alice'); wait(lambda: f.status('server')['active'] == 0, 'alice absent')
         deltas = f.status('server')['agentDeltas']
+        assert 'POPULATION_SAVED' in (f.directory / 'server.log').read_text()
+        population_tick = f.status('server')['populationTick']
         f.close('server', server=True)
+        assert read(f.save)['PopulationFile'] and len(list(f.directory.glob('world.json.population-*.bin'))) <= 2
         assert any(d['Dead'] for d in read(f.save)['AgentDeltas'])
         f.launch('server-return'); f.ready('server-return', 0)
         assert f.status('server-return')['agentDeltas'] == deltas
+        assert f.status('server-return')['populationLoad'] == 'snapshot' and f.status('server-return')['populationTick'] == population_tick
+        passed(f'population snapshots save in the background during play and restore exactly on restart (population tick {population_tick})')
         f.launch('alice-return', 'alice'); f.ready('alice-return')
         assert f.status('alice-return')['own']['Inventory'].get('questsim:ammo-9mm', 0) == 24 - shots
         assert all(a['Id'] != killed for a in f.status('alice-return')['snapshot']['Actors'])
-        passed('the death and spent ammo survive a server restart (population regenerated from seed + deltas)')
+        passed('the death and spent ammo survive a server restart (population snapshot + deltas)')
         f.close('alice-return'); wait(lambda: f.status('server-return')['active'] == 0, 'absent'); f.close('server-return', server=True)
         print('EVIDENCE', f.directory, flush=True)
     finally:
@@ -79,7 +84,7 @@ def run_combat():
 
 
 def run_budget():
-    f = NetworkFixture('living-1m'); f.population = 1_000_000
+    f = NetworkFixture('living-1m'); f.population = 1_000_000; f.server_args = ['--population-save-seconds=5']
     try:
         started = time.monotonic()
         f.launch('server'); f.ready('server', 0)
@@ -90,8 +95,9 @@ def run_budget():
         time.sleep(20)
         status = f.status('server')
         rate = (status['tick'] - t0) / (time.monotonic() - start)
-        assert status['populationLagged'] == 0 and rate > 18, (status['populationLagged'], rate)
-        passed(f"1,000,000 agents: server starts in {startup:.1f}s, holds {rate:.1f} ticks/s with the 1 Hz population tick never lagging; RSS {status['rssBytes'] / 2**20:.0f} MiB")
+        saves = (f.directory / 'server.log').read_text().count('POPULATION_SAVED')
+        assert status['populationLagged'] == 0 and rate > 18 and saves >= 2, (status['populationLagged'], rate, saves)
+        passed(f"1,000,000 agents: server starts in {startup:.1f}s, holds {rate:.1f} ticks/s with the 1 Hz population tick never lagging and {saves} background snapshots; RSS {status['rssBytes'] / 2**20:.0f} MiB")
         atomic(f.directory / 'result.json', {'startupSeconds': startup, 'ticksPerSecond': rate, 'rssBytes': status['rssBytes'], 'npcs': status['npcs']})
         f.close('alice'); wait(lambda: f.status('server')['active'] == 0, 'absent'); f.close('server', server=True)
         print('EVIDENCE', f.directory, flush=True)

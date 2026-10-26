@@ -166,6 +166,26 @@ public sealed class Population
         return keep;
     }
 
+    // Snapshot of the mutable arrays (detail flags excluded: a loaded world starts with no detailed agents).
+    const string Magic = "QSPOP";
+    public void Write(BinaryWriter w)
+    {
+        w.Write(Magic); w.Write(1); w.Write(Seed); w.Write(Count); w.Write(Tick);
+        foreach (var array in new[] { PosX, PosZ, TgtX, TgtZ, Info, MaskLo, MaskHi })
+            foreach (uint v in array) w.Write(array == Info ? v & ~Detailed : v);
+    }
+
+    public void Read(BinaryReader r)
+    {
+        if (r.ReadString() != Magic || r.ReadInt32() != 1 || r.ReadUInt64() != Seed || r.ReadInt32() != Count)
+            throw new InvalidDataException("Population snapshot does not match this world");
+        uint tick = r.ReadUInt32();
+        foreach (var array in new[] { PosX, PosZ, TgtX, TgtZ, Info, MaskLo, MaskHi })
+            for (int i = 0; i < Count; i++) array[i] = r.ReadUInt32();
+        Tick = tick;
+        BuildGrid();
+    }
+
     public bool Knows(uint i, int slot) => slot < 32 ? (MaskLo[i] & (1u << slot)) != 0 : (MaskHi[i] & (1u << (slot - 32))) != 0;
     public void Tell(uint i, int slot) { if (slot < 32) MaskLo[i] |= 1u << slot; else MaskHi[i] |= 1u << (slot - 32); }
 

@@ -59,6 +59,28 @@ public static class RumorChecks
         check(before == 20 && w.Standing(0) <= WorldAuthority.HostileBelow && w.IsHostile(angry) && bob.Stat(CharacterRecord.Health) < health &&
               w.State.Facts.Any(f => f.Kind == "hostile" && f.Subject == "faction:0") && w.Ask(3).Reason is "refused" or "nobody",
             $"killing Union members drops their standing ({before} -> {w.Standing(0)}); the Union turns hostile and attacks");
+        string dir = Path.Combine(Path.GetTempPath(), "questsim-pop-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(dir, "world.json");
+        try
+        {
+            Directory.CreateDirectory(dir);
+            var bytes = w.CapturePopulationNow()!;
+            string name = WorldAuthority.WritePopulationFile(path, w.Pop.Tick, bytes);
+            w.CommitPopulation(name, WorldAuthority.Hash(bytes));
+            WorldStorage.Save(path, w.State);
+            var reloaded = new WorldAuthority(WorldStorage.Load(path), synchronousPopulation: true);
+            reloaded.LoadPopulation(path);
+            long knowing = Enumerable.Range(0, w.Pop.Count).Count(i => Enumerable.Range(0, 64).Any(s => w.Pop.Knows((uint)i, s)));
+            check(reloaded.PopulationLoad == "snapshot" && reloaded.Pop!.Tick == w.Pop.Tick && reloaded.Pop.PosX.SequenceEqual(w.Pop.PosX) &&
+                  reloaded.Pop.MaskLo.SequenceEqual(w.Pop.MaskLo) && reloaded.Pop.Info.SequenceEqual(w.Pop.Info.Select(i => i & ~Population.Detailed)),
+                $"a population snapshot ({bytes.Length / 1024:N0} KiB) restores positions, rumor knowledge ({knowing} people) and the tick exactly");
+            File.WriteAllBytes(Path.Combine(dir, name), bytes[..(bytes.Length / 2)]);
+            var fallback = new WorldAuthority(WorldStorage.Load(path), synchronousPopulation: true);
+            fallback.LoadPopulation(path);
+            check(fallback.PopulationLoad.StartsWith("seed-fallback") && fallback.State.AgentDeltas.Where(d => d.Dead).All(d => (fallback.Pop!.Info[d.Index] & Population.Dead) != 0),
+                "a damaged population file is detected by hash and falls back to seed + deltas; deaths still hold");
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
         var factions = w.Snapshot(3).Factions!;
         check(factions.Length == 5 && factions.Where(f => f.Id < 3).Sum(f => f.Members) > 20_000 && factions.Single(f => f.Id == 2).Standing == -100,
             "snapshots report faction standing and living member counts from the population");
