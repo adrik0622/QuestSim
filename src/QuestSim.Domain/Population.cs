@@ -10,7 +10,9 @@ public sealed class Population
 {
     public const uint Zombie = 1u << 31, Travelling = 1u << 30, Detailed = 1u << 29, Dead = 1u << 28, None = uint.MaxValue;
     public const int GameSecondsPerTick = 48, HumanFactions = 3, Hostile = 2;
-    public const uint StepHuman = 1300 * GameSecondsPerTick, StepZombie = 500 * GameSecondsPerTick, WanderRadius = 250_000, HordeSpread = 300_000;
+    // A coarse tick is one real second: people walk at real-time speed, the same as in detail. The 48:1 compression
+    // applies to the clock (days, quests), not to walking. Hordes pick a new target every 20 real minutes.
+    public const uint StepHuman = 1300, StepZombie = 500, WanderRadius = 250_000, HordeSpread = 300_000, HordePeriod = 1200;
     public static readonly string[] FactionNames = ["Survivors' Union", "Free Traders", "The Hollow Choir", "Shambling Mass", "The Pale Tide"];
     public readonly uint[] PosX, PosZ, TgtX, TgtZ, Info, MaskLo, MaskHi;
     readonly uint[] heads, next, nextLo, nextHi, humanHeads, humanNext;   // all living agents / living humans only
@@ -78,7 +80,7 @@ public sealed class Population
     // Hordes wander between settlements of their faction's territory (alternate settlements), never the spawn district.
     public uint HordeTarget(uint horde, uint tick)
     {
-        uint count = (uint)Settlements.Count, target = Hash4((uint)Seed, 9, horde, tick / 75) % count;
+        uint count = (uint)Settlements.Count, target = Hash4((uint)Seed, 9, horde, tick / HordePeriod) % count;
         if (target % 2 != horde % 2) target = (target + 1) % count;
         while (Settlements[(int)target].Spawn || target % 2 != horde % 2) target = (target + 2) % count;
         return target;
@@ -244,6 +246,13 @@ public sealed class Population
         uint x = PosX[i], z = PosZ[i], tx = TgtX[i], tz = TgtZ[i], anchor = info & 0xFFFFFF;
         bool zombie = IsZombie(info), travelling = (info & Travelling) != 0;
         uint step = zombie ? StepZombie : StepHuman;
+        // Nightfall: people out wandering turn for home now rather than finishing a long daytime walk.
+        if (!zombie && !travelling && Night(GameHour(tick * (double)GameSecondsPerTick)) &&
+            Math.Max(Math.Abs((long)tx - settleX[anchor]), Math.Abs((long)tz - settleZ[anchor])) > NightRadius)
+        {
+            tx = Offset(settleX[anchor], Hash4((uint)Seed, tick, i, 3), NightRadius);
+            tz = Offset(settleZ[anchor], Hash4((uint)Seed, tick, i, 4), NightRadius);
+        }
         int dx = (int)tx - (int)x, dz = (int)tz - (int)z;
         uint ax = (uint)Math.Abs(dx), az = (uint)Math.Abs(dz);
         bool arrived = ax <= step && az <= step;

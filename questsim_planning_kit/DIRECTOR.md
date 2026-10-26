@@ -85,7 +85,7 @@ platforms; macOS is a stretch goal (Mac players can try a compatibility layer su
 CrossOver; untested). Vulkan is the graphics/compute API for server GPU simulation, with
 kernels written as GLSL compute shaders. No Metal or D3D12-specific work is planned.
 
-**Game time (2026-10-26):** 48:1 (Valheim-like): one game day = 30 real minutes; a server setting, revisited in playtests.
+**Game time (2026-10-26):** 48:1 (Valheim-like): one game day = 30 real minutes; a server setting, revisited in playtests. The compression applies to clocks (days, nights, quest deadlines), not to movement: everyone, near or far, walks at real-time speed.
 
 **Hosting and GPUs (2026-10-26):** discrete GPUs only (NVIDIA, AMD, Intel Arc; Vulkan
 1.2); integrated GPUs are not a target. The world's population budget scales with the host's
