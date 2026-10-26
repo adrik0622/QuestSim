@@ -224,3 +224,31 @@ python3 scripts/verify_terminal_shutdown.py    # 3 launcher/Ctrl-C checks
 All use fresh disposable fixtures; actual play saves are not edited by tests.
 The lost-reply test sends SIGSTOP/CONT/KILL only to its tracked test children.
 It never suspends user processes. Q02_RESULTS.md contains evidence and limitations.
+
+## Q02b — one wall panel, durable retry
+
+Rebuild **all** processes: save/wire protocol 3, content `questsim:q02b-room-v1`.
+Valid v2 saves get an immutable `.v2-<guid>.bak` before v3 replacement.
+
+- **F:** take from the nearest stocked crate in reach (green bandage, blue panels).
+- **B:** place a panel wall on the orange build cell (needs a panel, within 2m).
+- **T:** resend the last saved attempt, pickup or build.
+
+Current verified checks (Q02b_RESULTS.md has details):
+
+```bash
+bash scripts/check.sh                         # 54 domain/fixture checks
+bash scripts/build_game.sh                    # zero warnings/errors
+python3 scripts/verify_build.py               # 11 wall ENet/recovery/migration checks
+python3 scripts/verify_build_screen.py        # 4 F/B/T/C checks on private Xvfb + PNGs
+python3 scripts/verify_items.py               # 12 item regressions
+python3 scripts/verify_multiplayer.py         # 12 Q01 network regressions
+python3 scripts/verify_save_failures.py       # 4 persistence fault checks
+```
+
+Prefer `verify_build_screen.py` over real-desktop xdotool suites: it re-executes
+itself under `xvfb-run`, sends keys with `Input.ParseInputEvent` (intent-file
+`keys`) and saves viewport PNGs (intent-file `capture`). `xvfb-run python3
+scripts/verify_terminal_shutdown.py` passes its 3 behavior checks but its
+clean-log assertion trips on llvmpipe's V-Sync warning. `verify_item_desktop.py`
+and `verify_shared_desktop.py` need the real desktop and were not rerun for Q02b.

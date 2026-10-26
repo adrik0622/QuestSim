@@ -3,7 +3,7 @@
 [Resume handoff — 2026-10-25](HANDOFF_2026-10-25.md)
 
 Living multiplayer-world experiment, beginning with cooperative zombie survival.
-Current increment: two low-poly 3D clients and one server-authoritative item pickup.
+Current increment: two low-poly 3D clients, one server-authoritative item pickup and one modular wall placement.
 
 ```bash
 bash scripts/install_godot.sh
@@ -19,17 +19,19 @@ bash scripts/run_client.sh bob
 ```
 
 WASD moves; Q/E turns/orbits; Up/Down tilts; C switches first/third person;
-R resets the camera. **F** takes a bandage from the green crate; **T** retries
-the saved attempt. Only one player can take the single bandage. Close a client to disconnect; relaunch the same profile to
+R resets the camera. **F** takes from the nearest stocked crate (green bandage, blue
+panels); **B** places a panel wall on the orange cell; **T** retries the saved attempt.
+Only one player can take the bandage or build the single wall. Close a client to disconnect; relaunch the same profile to
 return. Characters retain identity and data while absent. World time pauses when
 the last player leaves. Data stays in `.artifacts/play/`; preserve profiles and save.
 
+[Wall results](questsim_planning_kit/Q02B_RESULTS.md) ·
 [Item results and screenshots](questsim_planning_kit/Q02_RESULTS.md) ·
 [Two-client baseline](questsim_planning_kit/Q01_RESULTS.md) ·
 [Runbook](questsim_planning_kit/RUNBOOK.md) · [State](questsim_planning_kit/STATE.md)
 
-One fixed crate/item; no item use/drop/trade, shared building, NPC simulation or quests.
-Save/protocol v2 requires rebuilding server/clients; Q01 saves get a backup before migration. Local Linux
+Fixed crates and one build cell; no item use/drop/trade, general building, NPC simulation or quests.
+Save/protocol v3 requires rebuilding server/clients; v1/v2 saves get a backup before migration. Local Linux
 Godot development runs are verified; standalone exports and other machines are not.
 
 The original comparison is preserved:

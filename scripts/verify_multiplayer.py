@@ -52,13 +52,13 @@ class NetworkFixture:
         self.save = self.directory / 'world.json'
         self.profiles = self.directory / 'profiles'
 
-    def launch(self, label, profile=None, headless=True, profiles=None, save=None):
+    def launch(self, label, profile=None, headless=True, profiles=None, save=None, intent=False):
         output = (self.directory / (label + '.log')).open('w')
         args = [str(ENGINE)] + (['--headless'] if headless else []) + ['--path', str(ROOT / 'src/QuestSim.Game'), '--',
                 '--port=' + str(self.port), '--status=' + str(self.directory / (label + '.json'))]
         if profile:
             args += ['--profile=' + profile, '--profiles-dir=' + str(profiles or self.profiles)]
-            if headless:
+            if headless or intent:
                 args += ['--intent-file=' + str(self.directory / (label + '-intent.json'))]
         else:
             args += ['--server', '--save=' + str(save or self.save), '--shutdown-file=' + str(self.directory / (label + '-stop'))]

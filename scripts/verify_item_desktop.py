@@ -27,14 +27,15 @@ try:
     wait(lambda:f.status('alice')['lastPickup'] and f.status('alice')['lastPickup']['Success'],'F takes item')
     original_a=f.status('alice')['lastPickup'];aid=f.status('alice')['ownId']
     b.key('f')
-    wait(lambda:f.status('bob')['lastPickup'] and f.status('bob')['lastPickup']['Reason']=='empty','other F sees empty')
+    # Since Q02b, F skips the empty bandage crate and takes from the nearest stocked crate (panels).
+    wait(lambda:f.status('bob')['lastPickup'] and f.status('bob')['lastPickup']['ItemId']=='questsim:wall-panel','other F takes a panel')
     original_b=f.status('bob')['lastPickup']
     assert f.status('alice')['own']['Inventory']['questsim:bandage']==1
     assert f.status('bob')['own']['Inventory'].get('questsim:bandage',0)==0
-    wait(lambda:all(f.status(label)['snapshot']['Supply']['Count']==0 for label in ['alice','bob']),'both crate displays empty')
+    wait(lambda:all(f.status(label)['snapshot']['Supplies'][0]['Count']==0 for label in ['alice','bob']),'both crate displays empty')
     print(a.screenshot('items-winner'),flush=True)
     print(b.screenshot('items-loser'),flush=True)
-    passed('real F input takes one item, updates inventory/stock, and rejects the other player')
+    passed('real F input takes the one bandage; the other player gets a panel instead')
     a.key('t');b.key('t')
     wait(lambda:all((OUT/('items-'+label+'.log')).read_text().count('ITEM_REPLY')>=2 for label in ['alice','bob']),'T acknowledgements')
     assert f.status('alice')['lastPickup']==original_a and f.status('bob')['lastPickup']==original_b
@@ -59,7 +60,7 @@ try:
     for label in ['alice','bob','alice-return']:
         text=(OUT/('items-'+label+'.log')).read_text()
         assert 'ERROR:' not in text and 'WARNING:' not in text,text
-    atomic(f.directory/'result.json',{'checks':checks,'stock':read(f.save)['Supply']['Count'],'receipt_count':len(read(f.save)['Receipts'])})
+    atomic(f.directory/'result.json',{'checks':checks,'stock':read(f.save)['Supplies'][0]['Count'],'receipt_count':len(read(f.save)['Receipts'])})
     print('EVIDENCE',f.directory,flush=True)
 finally:
     for w in windows:
