@@ -96,15 +96,59 @@ public sealed partial class WorldAuthority
             $"Bounty: defeat {DisplayName(victor)}, who took {player.Name}'s gear. Last seen near ({victor.X:0}, {victor.Z:0}).");
     }
 
+    readonly List<(uint Index, double X, double Z)> pendingPossessions = new();
+
     void Retire(CharacterRecord player, string status, string reason)
     {
         AddFact(status == "turned" ? "turned" : "died", player.Id, "", player.X, player.Z);
-        if (player.Inventory.Count > 0) TransferAll(player.Id, $"cache:{NewCache(player.X, player.Z, $"Remains of {player.Name}").Id}", status);
+        uint? body = status == "turned" ? TurnedBody() : null;
+        if (body is uint index)
+        {
+            // The turned player roams as a named zombie carrying their gear; putting it to rest recovers the gear.
+            var named = NamedFor(index);
+            named.Title = $"(once {player.Name})";
+            if (player.Inventory.Count > 0) TransferAll(player.Id, $"npc:{index}", "turned");
+            pendingPossessions.Add((index, player.X, player.Z));
+            CreateOpportunity("rest", player.Id, $"npc:{index}", Ammo, 6,
+                $"{player.Name} turned and roams with the horde, still carrying their gear. Put them to rest. Last seen near ({player.X:0}, {player.Z:0}).");
+        }
+        else if (player.Inventory.Count > 0) TransferAll(player.Id, $"cache:{NewCache(player.X, player.Z, $"Remains of {player.Name}").Id}", status);
         player.Status = status;
         player.Conditions.Clear();
         int peer = PeerOf(player);
         if (peer != 0) { Leave(peer); PendingKicks.Add((peer, reason)); }
         player.ProfileId = Guid.NewGuid().ToString("N");   // the profile starts a new character on its next join
+    }
+
+    // A coarse zombie, not detailed, dead or already named, becomes the turned player's body.
+    uint? TurnedBody()
+    {
+        if (Pop is null) return null;
+        for (uint k = 0; k < Pop.Count; k++)
+        {
+            uint i = (uint)((Population.Hash4((uint)State.WorldSeed, 61, (uint)State.Facts.Count, 0) + k) % (uint)Pop.Count);
+            if (Population.IsZombie(Pop.Info[i]) && (Pop.Info[i] & (Population.Detailed | Population.Dead)) == 0 &&
+                State.Named.All(n => n.Index != i) && pendingPossessions.All(p => p.Index != i)) return i;
+        }
+        return null;
+    }
+
+    // A named NPC killed by anything other than a player drops what it carried where it fell.
+    void DropCarried(Npc npc)
+    {
+        var named = State.Named.FirstOrDefault(n => n.Index == npc.Index);
+        if (named is { Inventory.Count: > 0 })
+            TransferAll($"npc:{npc.Index}", $"cache:{NewCache(npc.X, npc.Z, $"Remains of {DisplayName(npc)}").Id}", "fell");
+    }
+
+    void ApplyPossessions()
+    {
+        foreach (var (i, x, z) in pendingPossessions)
+        {
+            Pop!.PosX[i] = Pop.TgtX[i] = Population.ToMm(x);
+            Pop.PosZ[i] = Pop.TgtZ[i] = Population.ToMm(z);
+        }
+        pendingPossessions.Clear();
     }
 
     // Conditions count down only while their player is online (absent players are protected).
@@ -181,7 +225,7 @@ public sealed partial class WorldAuthority
         var named = State.Named.FirstOrDefault(n => n.Index == npc.Index);
         if (named is null) return;
         TransferAll($"npc:{npc.Index}", killer.Id, "avenged");   // the victor's carried gear, including the victim's
-        foreach (var o in State.Opportunities.Where(o => o.Status == "open" && o.Kind == "revenge" && o.Target == $"npc:{npc.Index}").ToArray())
+        foreach (var o in State.Opportunities.Where(o => o.Status == "open" && o.Kind is ("revenge" or "rest") && o.Target == $"npc:{npc.Index}").ToArray())
         {
             Claim(o, killer);
             AdjustStanding(0, 15); AdjustStanding(1, 10);
@@ -237,7 +281,7 @@ public sealed partial class WorldAuthority
     // Keep revenge bounties pointing at where the victor actually is (coarse position, rounded).
     void RefreshOpportunities()
     {
-        foreach (var o in State.Opportunities.Where(o => o.Status == "open" && o.Kind == "revenge"))
+        foreach (var o in State.Opportunities.Where(o => o.Status == "open" && o.Kind is ("revenge" or "rest")))
         {
             uint i = uint.Parse(o.Target[4..]);
             if (Pop is null || i >= Pop.Count) continue;

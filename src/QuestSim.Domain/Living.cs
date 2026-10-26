@@ -45,6 +45,7 @@ public sealed partial class WorldAuthority
     {
         if (populationTask is { IsCompleted: false }) { PopulationLagged++; return; }
         populationTask?.GetAwaiter().GetResult();
+        ApplyPossessions();
         SyncTiers();
         PrepareRumors();
         if (PopulationSaveRequested) CapturePopulation();
@@ -150,7 +151,11 @@ public sealed partial class WorldAuthority
                         rival.Health = Math.Max(0, rival.Health - 8);
                         rival.Dead = rival.Health == 0;
                         RecordDelta(rival.Index, rival.Health, rival.Dead);
-                        if (rival.Dead) AddFact("horde-clash", $"npc:{npc.Index}", $"npc:{rival.Index}", rival.X, rival.Z);
+                        if (rival.Dead)
+                        {
+                            AddFact("horde-clash", $"npc:{npc.Index}", $"npc:{rival.Index}", rival.X, rival.Z);
+                            DropCarried(rival);
+                        }
                     }
                     continue;
                 }

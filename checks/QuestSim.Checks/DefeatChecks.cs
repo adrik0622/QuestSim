@@ -61,11 +61,24 @@ public static class DefeatChecks
         alice.X = -3; alice.Z = 0;
         alice.Conditions[WorldAuthority.Infected] = 2;
         Steps(w, 3);
-        var remains = w.State.Caches.Single(k => k.Label == "Remains of Alice");
-        check(alice.Status == "turned" && w.PendingKicks.Any(k => k.Peer == 2) && remains.Inventory.ContainsKey(WorldAuthority.Pistol) && alice.Inventory.Count == 0,
-            "an untreated infection turns the player; their gear drops into a remains cache");
+        var body = w.State.Named.Single(n => n.Title == "(once Alice)");
+        var rest = w.State.Opportunities.Single(o => o.Kind == "rest");
+        check(alice.Status == "turned" && w.PendingKicks.Any(k => k.Peer == 2) && body.Inventory.ContainsKey(WorldAuthority.Pistol) && alice.Inventory.Count == 0 &&
+              rest.Target == $"npc:{body.Index}" && rest.Status == "open",
+            "an untreated infection turns the player into a named zombie carrying their gear; a 'put them to rest' opportunity opens");
         var fresh = w.Join(4, new string('a', 32), "Alice");
-        check(fresh.Id != alice.Id && fresh.Inventory[WorldAuthority.Pistol] == 1 && w.State.Characters.Contains(alice),
+        fresh.X = 60; fresh.Z = 40; while (!w.IsSafe(fresh.X, fresh.Z, fresh.Id)) fresh.X += 1;   // away from the earlier zombie
+        Steps(w, WorldAuthority.PopulationEvery);
+        var turned = SummonIndex(w, body.Index, fresh.X + 1, fresh.Z);
+        check(turned.Name == "Zombie" && w.DisplayName(turned) == "Zombie (once Alice)" && Math.Abs(Population.ToMetres(w.Pop!.PosX[body.Index]) - turned.X) < 50,
+            "the turned body appears where it was summoned for the test, titled with the player's name");
+        turned.Health = 1; turned.Cooldown = 1000;
+        fresh.Heading = Math.Atan2(-(turned.X - fresh.X), -(turned.Z - fresh.Z));
+        Steps(w, WorldAuthority.MeleeCooldown);
+        var put = w.Attack(4, "melee");
+        check(put.Killed && fresh.Inventory[WorldAuthority.Pistol] == 2 && rest.Status == "claimed" && body.Inventory.Count == 0,
+            $"putting the turned body to rest recovers the old gear and claims the reward once ({put.Reason}, pistols {fresh.Inventory.GetValueOrDefault(WorldAuthority.Pistol)}, {rest.Status}, carried {body.Inventory.Count})");
+        check(fresh.Id != alice.Id && fresh.Inventory[WorldAuthority.Pistol] >= 1 && w.State.Characters.Contains(alice),
             "the same profile rejoins as a new character; the turned character's record is kept");
 
         // Choir capture: the victor takes the actual items, gains a title and buffs; rescue and revenge open.
