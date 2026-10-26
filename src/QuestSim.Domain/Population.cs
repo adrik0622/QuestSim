@@ -75,11 +75,13 @@ public sealed class Population
     static uint Offset(uint centre, uint hash, uint radius) =>
         (uint)Math.Clamp((long)centre + hash % (2 * radius + 1) - radius, 0, 2L * CityGen.Half * 1000);
 
-    // Hordes wander between settlements, never into the spawn district.
-    uint HordeTarget(uint horde, uint tick)
+    // Hordes wander between settlements of their faction's territory (alternate settlements), never the spawn district.
+    public uint HordeTarget(uint horde, uint tick)
     {
-        uint target = Hash4((uint)Seed, 9, horde, tick / 75) % (uint)Settlements.Count;
-        return Settlements[(int)target].Spawn ? (target + 1) % (uint)Settlements.Count : target;
+        uint count = (uint)Settlements.Count, target = Hash4((uint)Seed, 9, horde, tick / 75) % count;
+        if (target % 2 != horde % 2) target = (target + 1) % count;
+        while (Settlements[(int)target].Spawn || target % 2 != horde % 2) target = (target + 2) % count;
+        return target;
     }
 
     public static bool IsZombie(uint info) => (info & Zombie) != 0;

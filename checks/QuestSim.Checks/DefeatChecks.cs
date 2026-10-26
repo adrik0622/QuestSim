@@ -42,6 +42,11 @@ public static class DefeatChecks
               stash.Inventory[WorldAuthority.Antiviral] == 1 && w.State.Transfers.Any(t => t.From == "vgm" && t.Reason == "story") &&
               w.State.Facts.Any(f => f.Kind == "defeat" && f.Subject == alice.Id),
             $"a zombie defeat infects and injures the player, who wakes in the starter room; the game master invents a cure stash ({cure.Text[..40]}...)");
+        alice.Conditions[WorldAuthority.Infected] = 500;
+        alice.X = zombie.X - 1; alice.Z = zombie.Z;
+        Down(w, alice, zombie);
+        check(alice.Conditions[WorldAuthority.Infected] < 500 && w.State.Opportunities.Count(o => o.Kind == "cure") == 1,
+            "a second bite while infected neither resets the infection clock nor spawns another cure");
         long remaining = alice.Conditions[WorldAuthority.Infected];
         w.Join(3, new string('b', 32), "Bob"); w.Leave(2);
         Steps(w, 100);

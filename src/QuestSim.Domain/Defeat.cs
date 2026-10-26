@@ -76,10 +76,11 @@ public sealed partial class WorldAuthority
         if (State.Permadeath) { Retire(player, "dead", "You died. Permadeath is on: rejoin to start a new character."); return; }
         if (victor.Zombie)
         {
-            player.Conditions[Infected] = InfectionTicks;
+            bool already = player.Conditions.ContainsKey(Infected);   // a new bite never buys more time
+            if (!already) player.Conditions[Infected] = InfectionTicks;
             var safe = FindSafe(-3, 0, player.Id);
             player.X = safe.X; player.Z = safe.Z;
-            CreateCureOpportunity(player);
+            if (!already) CreateCureOpportunity(player);
             return;
         }
         // Captured: the victor takes the player's actual items and rises to a named persistent NPC.

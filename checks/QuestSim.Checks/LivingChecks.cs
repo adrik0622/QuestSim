@@ -101,6 +101,17 @@ public static class LivingChecks
         var walled = w.Attack(2, "shoot");
         check(walled.Reason == "blocked" && !alice.Inventory.ContainsKey(WorldAuthority.Ammo), "walls stop bullets; the round is still spent");
 
+        alice.X = 60; alice.Z = 40; while (!w.IsSafe(alice.X, alice.Z, alice.Id)) alice.X += 1;
+        var mass = Summon(w, true, alice.X + 30, alice.Z);
+        var tide = Enumerable.Range(0, w.Pop.Count).Select(k => (uint)k).First(k => Population.IsZombie(w.Pop.Info[k]) && Population.FactionOf(w.Pop.Info[k]) != mass.Faction &&
+            (w.Pop.Info[k] & (Population.Detailed | Population.Dead)) == 0);
+        var rival = SummonIndex(w, tide, alice.X + 32, alice.Z);
+        int facts = w.State.Facts.Count;
+        for (int k = 0; k < 400 && !mass.Dead && !rival.Dead; k++) w.Step();
+        check((mass.Dead || rival.Dead) && w.State.Facts.Skip(facts).Any(f => f.Kind == "horde-clash") &&
+              Enumerable.Range(0, 40).All(h => w.Pop.HordeTarget((uint)h, 0) % 2 == h % 2),
+            $"rival horde factions keep separate territories and fight where they meet ({Population.FactionNames[mass.Faction]} vs {Population.FactionNames[rival.Faction]})");
+
         bool downed = false;
         alice.X = -3; alice.Z = 0;
         alice.Stats[CharacterRecord.Health] = 5;

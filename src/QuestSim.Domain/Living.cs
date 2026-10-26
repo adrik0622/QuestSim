@@ -136,6 +136,25 @@ public sealed partial class WorldAuthority
                 double sight = npc.Zombie ? 18 : 25;
                 prey = players.Where(p => !IsCaptive(p) && Distance(p.X, p.Z, npc.X, npc.Z) <= sight).OrderBy(p => Distance(p.X, p.Z, npc.X, npc.Z)).ThenBy(p => p.Id).FirstOrDefault();
             }
+            if (prey is null && npc.Zombie && !npc.Dead)
+            {
+                // Rival hordes fight where their territories meet.
+                var rival = npcs.Values.Where(r => r.Zombie && !r.Dead && r.Faction != npc.Faction && Distance(r.X, r.Z, npc.X, npc.Z) <= 6)
+                    .OrderBy(r => Distance(r.X, r.Z, npc.X, npc.Z)).ThenBy(r => r.Index).FirstOrDefault();
+                if (rival is not null)
+                {
+                    if (Distance(rival.X, rival.Z, npc.X, npc.Z) > 1.1) MoveNpc(npc, rival.X, rival.Z, 1.6);
+                    else if (npc.Cooldown == 0)
+                    {
+                        npc.Cooldown = 24;
+                        rival.Health = Math.Max(0, rival.Health - 8);
+                        rival.Dead = rival.Health == 0;
+                        RecordDelta(rival.Index, rival.Health, rival.Dead);
+                        if (rival.Dead) AddFact("horde-clash", $"npc:{npc.Index}", $"npc:{rival.Index}", rival.X, rival.Z);
+                    }
+                    continue;
+                }
+            }
             if (prey is not null)
             {
                 double d = Distance(prey.X, prey.Z, npc.X, npc.Z);
