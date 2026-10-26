@@ -52,3 +52,24 @@ jobs:
         run: cp experiments/population/NuGet.Config src/QuestSim.Game/NuGet.Config
       - name: Build game
         run: dotnet build src/QuestSim.Game -warnaserror
+
+  game-suites:
+    # Manual only (Actions tab -> checks -> Run workflow): real headless server/client ENet suites with the pinned Godot.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Install pinned Godot (checksum verified)
+        run: bash scripts/install_godot.sh
+      - name: Build game
+        run: bash scripts/build_game.sh
+      - name: ENet suites
+        run: |
+          set -e
+          for suite in verify_items verify_build verify_multiplayer verify_save_failures verify_defeat verify_content; do
+            echo "::group::$suite"; python3 scripts/$suite.py; echo "::endgroup::"
+          done
