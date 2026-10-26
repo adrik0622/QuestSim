@@ -37,3 +37,4 @@ Check(previous.SequenceEqual(replay.GetActors()), "same steps reproduce identica
 Console.WriteLine("Offline domain fixture only; no engine, collision, networking or persistence verified.");
 AuthorityChecks.Run(Check);
 PickupChecks.Run(Check);
+BuildChecks.Run(Check);

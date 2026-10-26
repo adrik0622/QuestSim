@@ -8,12 +8,12 @@ public static class PickupChecks
         var world = new WorldAuthority(new WorldSave());
         var a = world.Join(2, new string('a', 32), "Alice");
         var b = world.Join(3, new string('b', 32), "Bob");
-        string item = world.State.Supply.ItemId, target = world.State.Supply.Id;
+        string item = world.State.Supplies[0].ItemId, target = world.State.Supplies[0].Id;
         string firstId = Guid.NewGuid().ToString("N"), secondId = firstId; // Same ID across different actors must stay isolated.
         var first = world.TakeItem(2, firstId, target);
         var second = world.TakeItem(3, secondId, target);
         check(first.Success && !second.Success && second.Reason == "empty" &&
-            a.Inventory.GetValueOrDefault(item) + b.Inventory.GetValueOrDefault(item) + world.State.Supply.Count == 1,
+            a.Inventory.GetValueOrDefault(item) + b.Inventory.GetValueOrDefault(item) + world.State.Supplies[0].Count == 1,
             "last-item race with the same request ID on different actors conserves one bandage");
         check(world.TakeItem(2, firstId.ToUpperInvariant(), target) == first && world.TakeItem(3, secondId, target) == second && world.State.Receipts.Count == 2,
             "winner and loser retries, including GUID case variants, replay original receipts");
@@ -29,13 +29,13 @@ public static class PickupChecks
         var far = other.Join(2, new string('c', 32), "Far"); far.X = 5; far.Z = 5;
         var denied = other.TakeItem(2, Guid.NewGuid().ToString("N"), target);
         var missing = other.TakeItem(2, Guid.NewGuid().ToString("N"), "questsim:missing");
-        check(denied.Reason == "out_of_reach" && missing.Reason == "unknown_container" && other.State.Supply.Count == 1 && far.Inventory.Count == 0,
+        check(denied.Reason == "out_of_reach" && missing.Reason == "unknown_container" && other.State.Supplies[0].Count == 1 && far.Inventory.Count == 0,
             "reach and target validation prevent remote or unknown-container transfers");
         far.X = -3; far.Z = 0;
-        check(other.TakeItem(2, denied.RequestId, target) == denied && other.State.Supply.Count == 1,
+        check(other.TakeItem(2, denied.RequestId, target) == denied && other.State.Supplies[0].Count == 1,
             "previous rejection remains stable after player moves into reach");
         far.Inventory[item] = int.MaxValue;
-        check(other.TakeItem(2, Guid.NewGuid().ToString("N"), target).Reason == "inventory_full" && other.State.Supply.Count == 1,
+        check(other.TakeItem(2, Guid.NewGuid().ToString("N"), target).Reason == "inventory_full" && other.State.Supplies[0].Count == 1,
             "inventory overflow rejected without consuming supply");
         string dir = Path.Combine(Path.GetTempPath(), "questsim-pickup-" + Guid.NewGuid().ToString("N"));
         string path = Path.Combine(dir, "world.json");
@@ -44,16 +44,16 @@ public static class PickupChecks
             WorldStorage.Save(path, world.State);
             var loaded = new WorldAuthority(WorldStorage.Load(path));
             var restored = loaded.Join(5, a.ProfileId, "Alice");
-            check(loaded.TakeItem(5, firstId, target) == first && restored.Inventory[item] == 1 && loaded.State.Supply.Count == 0,
+            check(loaded.TakeItem(5, firstId, target) == first && restored.Inventory[item] == 1 && loaded.State.Supplies[0].Count == 0,
                 "reconnect and restart preserve consumed supply, inventory and successful receipt");
             loaded.Join(6, b.ProfileId, "Bob");
             check(loaded.TakeItem(6, secondId, target) == second, "losing receipt persists across reconnect/restart");
             var v1 = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
-            v1["Version"] = 1; v1["ContentId"] = "questsim:q01-room-v1"; v1.Remove("Supply"); v1.Remove("Receipts");
+            v1["Version"] = 1; v1["ContentId"] = "questsim:q01-room-v1"; v1.Remove("Receipts"); v1.Remove("Supplies"); v1.Remove("BuildReceipts");
             string original = v1.ToJsonString(); File.WriteAllText(path, original);
             var migrated = WorldStorage.Load(path);
             string backup = Directory.GetFiles(dir, "world.json.v1-*.bak").Single();
-            check(File.ReadAllText(path) == original && File.ReadAllText(backup) == original && migrated.Version == 2 &&
+            check(File.ReadAllText(path) == original && File.ReadAllText(backup) == original && migrated.Version == 3 &&
                 migrated.Characters.Single(c => c.Id == a.Id).Inventory[item] == 1 && migrated.Tick == world.State.Tick && migrated.Blocks.SequenceEqual(world.State.Blocks),
                 "Q01 migration validates and backs up original bytes, preserving character/world facts");
             WorldStorage.Save(path, migrated);
@@ -61,7 +61,7 @@ public static class PickupChecks
             migratedAuthority.Join(9, a.ProfileId, "Alice");
             migratedAuthority.TakeItem(9, Guid.NewGuid().ToString("N"), target);
             WorldStorage.Save(path, migratedAuthority.State);
-            check(WorldStorage.Load(path).Supply.Count == 0 && Directory.GetFiles(dir, "*.bak").Length == 1,
+            check(WorldStorage.Load(path).Supplies[0].Count == 0 && Directory.GetFiles(dir, "*.bak").Length == 1,
                 "v2 reload does not repeat migration, create another backup or restock the crate");
             var corrupt = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
             var owner = corrupt["Characters"]!.AsArray().Single(c => c!["Id"]!.GetValue<string>() == a.Id)!;
@@ -72,12 +72,12 @@ public static class PickupChecks
             try { WorldStorage.Load(path); } catch (InvalidDataException) { lostItem = true; }
             check(lostItem, "successful receipt without the awarded item rejected as inconsistent");
             owner["Inventory"]![item] = held;
-            corrupt["Supply"]!["Count"] = 1;
+            corrupt["Supplies"]![0]!["Count"] = 1;
             File.WriteAllText(path, corrupt.ToJsonString());
             bool inconsistent = false;
             try { WorldStorage.Load(path); } catch (InvalidDataException) { inconsistent = true; }
             check(inconsistent, "stock/receipt disagreement rejected instead of restoring a consumed item");
-            corrupt["Supply"]!["Count"] = 0;
+            corrupt["Supplies"]![0]!["Count"] = 0;
             corrupt["Receipts"]!.AsArray().Add(corrupt["Receipts"]![0]!.DeepClone());
             File.WriteAllText(path, corrupt.ToJsonString());
             bool rejected = false;
