@@ -10,7 +10,20 @@ public sealed partial class WorldAuthority
     public const long RumorLifetime = 3600;          // population ticks (2 game days at 48:1)
     public const double WitnessRadius = 150, AskReach = 3;
     public const int HostileBelow = -50;
-    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed"];
+    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack"];
+    public const int AttackFactThreshold = 10;
+
+    // Background attrition becomes news when a settlement loses enough people in one coarse tick.
+    void ReportLosses()
+    {
+        var pop = Pop!;
+        foreach (var (home, lost) in pop.SettlementLosses.Where(l => l.Value >= AttackFactThreshold).OrderBy(l => l.Key))
+        {
+            var s = pop.Settlements[home];
+            AddFact("attack", $"faction:{pop.SettlementFaction[home]}", $"settlement:{home}:{lost}", s.X, s.Z);
+        }
+        pop.SettlementLosses.Clear();
+    }
     readonly int[] slotFact = Enumerable.Repeat(-1, 64).ToArray();
     readonly long[] slotStart = new long[64];
     readonly uint[] slotCredibility = new uint[64];
@@ -127,6 +140,7 @@ public sealed partial class WorldAuthority
         "rescued" => $"{NameOf(f.Object)} freed {NameOf(f.Subject)} {Place(f.X, f.Z)}.",
         "turned" => $"{NameOf(f.Subject)} turned; the infection took them {Place(f.X, f.Z)}.",
         "died" => $"{NameOf(f.Subject)} died {Place(f.X, f.Z)}.",
+        "attack" => $"The dead overran the settlement {Place(f.X, f.Z)}; {f.Object.Split(':')[2]} people were lost.",
         "claimed" => $"{NameOf(f.Subject)} brought down {NameOf(State.Opportunities.First(o => $"opportunity:{o.Id}" == f.Object).Target)}.",
         _ => $"Something happened {Place(f.X, f.Z)}."
     };

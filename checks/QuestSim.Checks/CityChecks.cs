@@ -62,6 +62,14 @@ public static class CityChecks
         double night = MeanHomeDistance();
         check(night < day * .6, $"humans head home at night: mean distance from home {day:0} m at 14:00, {night:0} m at 23:30");
 
+        var hunted = new Population(gen, 60_000);
+        long humans = Enumerable.Range(0, hunted.Count).LongCount(i => !Population.IsZombie(hunted.Info[i]));
+        long zombies = hunted.Count - humans, lostHumans = 0, lostZombies = 0;
+        for (int t = 0; t < 120; t++) { hunted.Step(); lostHumans += hunted.SettlementLosses.Values.Sum(); lostZombies += hunted.ZombieLosses; hunted.SettlementLosses.Clear(); }
+        long deadHumans = Enumerable.Range(0, hunted.Count).LongCount(i => !Population.IsZombie(hunted.Info[i]) && (hunted.Info[i] & Population.Dead) != 0);
+        check(lostHumans > 0 && lostZombies > 0 && deadHumans == lostHumans && deadHumans < humans / 10,
+            $"away from players, hordes and settlements wear each other down: {lostHumans} of {humans} humans and {lostZombies} of {zombies} zombies lost in 120 coarse ticks (~1.6 game hours)");
+
         var world = new WorldAuthority(new WorldSave());
         var tower = Enumerable.Range(0, 3).SelectMany(cx => world.City.Chunk(cx, 0)).First();
         check(!world.IsSafe(tower.X, tower.Z) && world.IsSafe(60, 0) && !world.IsSafe(6, 0) && world.IsSafe(3, 6.5),

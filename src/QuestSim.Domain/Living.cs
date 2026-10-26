@@ -45,6 +45,7 @@ public sealed partial class WorldAuthority
     {
         if (populationTask is { IsCompleted: false }) { PopulationLagged++; return; }
         populationTask?.GetAwaiter().GetResult();
+        ReportLosses();
         ApplyPossessions();
         SyncTiers();
         PrepareRumors();

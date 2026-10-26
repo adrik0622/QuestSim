@@ -13,7 +13,7 @@ public sealed class Population
     public const uint StepHuman = 1300 * GameSecondsPerTick, StepZombie = 500 * GameSecondsPerTick, WanderRadius = 250_000, HordeSpread = 300_000;
     public static readonly string[] FactionNames = ["Survivors' Union", "Free Traders", "The Hollow Choir", "Shambling Mass", "The Pale Tide"];
     public readonly uint[] PosX, PosZ, TgtX, TgtZ, Info, MaskLo, MaskHi;
-    readonly uint[] heads, next, nextLo, nextHi;
+    readonly uint[] heads, next, nextLo, nextHi, humanHeads, humanNext;   // all living agents / living humans only
     public uint TableMask { get; }
     public int Count { get; }
     public ulong Seed { get; }
@@ -47,7 +47,7 @@ public sealed class Population
         PosX = new uint[count]; PosZ = new uint[count]; TgtX = new uint[count]; TgtZ = new uint[count]; Info = new uint[count];
         MaskLo = new uint[count]; MaskHi = new uint[count]; next = new uint[count]; nextLo = new uint[count]; nextHi = new uint[count];
         TableMask = (uint)BitOperations.RoundUpToPowerOf2((ulong)Math.Max(1024, count * 2)) - 1;
-        heads = new uint[TableMask + 1L];
+        heads = new uint[TableMask + 1L]; humanHeads = new uint[TableMask + 1L]; humanNext = new uint[count];
         uint hordes = (uint)Math.Max(2, count * (1 - humanFraction) / 5000);
         uint humanCut = (uint)(humanFraction * uint.MaxValue);
         for (uint i = 0; i < count; i++)
@@ -101,6 +101,7 @@ public sealed class Population
         var partitions = Partitioner.Create(0, Count, Math.Max(4096, Count / (Environment.ProcessorCount * 4)));
         Parallel.ForEach(partitions, range => { for (int i = range.Item1; i < range.Item2; i++) Move((uint)i, tick); });
         BuildGrid();
+        Encounters(tick, partitions);
         var carriers = new uint[64];
         var members = new long[16];
         bool spreading = rumors is not null && (rumors.ActiveLo | rumors.ActiveHi) != 0;
@@ -125,6 +126,46 @@ public sealed class Population
         Tick++;
     }
 
+    // Away from players, zombies and humans in contact (5 m) may kill each other: a small deterministic chance per pair
+    // and tick. Detailed agents belong to the authority and are skipped. Losses per settlement feed "attack" facts.
+    public const uint EncounterRadius = 5_000;
+    public static uint HumanLossThreshold = (uint)(0.0005 * uint.MaxValue), ZombieLossThreshold = (uint)(0.0005 * uint.MaxValue);
+    public Dictionary<int, int> SettlementLosses { get; } = new();
+    public long ZombieLosses { get; private set; }
+
+    void Encounters(uint tick, OrderablePartitioner<Tuple<int, int>> partitions)
+    {
+        var dying = new ConcurrentBag<uint>();
+        ulong r2 = (ulong)EncounterRadius * EncounterRadius;
+        Parallel.ForEach(partitions, range =>
+        {
+            for (int k = range.Item1; k < range.Item2; k++)
+            {
+                uint z = (uint)k, info = Info[z];
+                if (!IsZombie(info) || (info & (Dead | Detailed)) != 0) continue;
+                uint cx = PosX[z] >> 16, cz = PosZ[z] >> 16;
+                for (int oz = -1; oz <= 1; oz++)
+                    for (int ox = -1; ox <= 1; ox++)
+                        for (uint h = humanHeads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; h != None; h = humanNext[h])
+                        {
+                            if ((Info[h] & Detailed) != 0) continue;
+                            long dx = (long)PosX[h] - PosX[z], dz = (long)PosZ[h] - PosZ[z];
+                            if ((ulong)(dx * dx + dz * dz) > r2) continue;
+                            if (Hash4((uint)Seed, tick, z, Mix(h) ^ 0xA00) < HumanLossThreshold) dying.Add(h);
+                            if (Hash4((uint)Seed, tick, h, Mix(z) ^ 0xB00) < ZombieLossThreshold) dying.Add(z);
+                        }
+            }
+        });
+        SettlementLosses.Clear();
+        ZombieLosses = 0;
+        foreach (uint d in dying.Distinct().Order())
+        {
+            Info[d] |= Dead;
+            if (IsZombie(Info[d])) ZombieLosses++;
+            else { int home = (int)(Info[d] & 0xFFFFFF); SettlementLosses[home] = SettlementLosses.GetValueOrDefault(home) + 1; }
+        }
+    }
+
     // E1 spread rule: reads previous masks only, deterministic per (agent, neighbour, rumor), so thread order never matters.
     void Spread(uint i, uint tick, RumorInput r, uint[] carriers)
     {
@@ -135,10 +176,10 @@ public sealed class Population
         ulong c2 = (ulong)ContactRadius * ContactRadius;
         for (int oz = -1; oz <= 1; oz++)
             for (int ox = -1; ox <= 1; ox++)
-                for (uint b = heads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; b != None; b = next[b])
+                for (uint b = humanHeads[CellOf(cx + (uint)ox, cz + (uint)oz, TableMask)]; b != None; b = humanNext[b])
                 {
                     uint binfo = Info[b];
-                    if (b == i || IsZombie(binfo)) continue;
+                    if (b == i) continue;
                     long dx = (long)PosX[b] - x, dz = (long)PosZ[b] - z;
                     if ((ulong)(dx * dx + dz * dz) > c2) continue;
                     uint trust = r.Trust[faction * 8 + ((uint)FactionOf(binfo) & 7)];
@@ -248,11 +289,13 @@ public sealed class Population
     void BuildGrid()
     {
         Array.Fill(heads, None);
+        Array.Fill(humanHeads, None);
         for (uint i = 0; i < Count; i++)
         {
-            if ((Info[i] & Dead) != 0) { next[i] = None; continue; }
+            if ((Info[i] & Dead) != 0) { next[i] = humanNext[i] = None; continue; }
             uint h = CellOf(PosX[i] >> 16, PosZ[i] >> 16, TableMask);
             next[i] = heads[h]; heads[h] = i;
+            if (!IsZombie(Info[i])) { humanNext[i] = humanHeads[h]; humanHeads[h] = i; }
         }
     }
 
