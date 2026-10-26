@@ -33,7 +33,7 @@ public sealed record FactionEvent(string Kind, int From, int To, int Settlement,
 public static class Politics
 {
     public const int Count = 5, Union = 0, Traders = 1, Choir = Population.Hostile;
-    public const int TradeDelay = 12, RaidDelay = 6, Lacking = 30, Desperate = 15, Spare = 40;   // hours; days of stock ×10 (people keep 3-6 days)
+    public const int TradeDelay = 12, RaidDelay = 6, Lacking = 30, Desperate = 15, Spare = 30;   // hours; days of stock ×10 (people keep 3-6 days)
     public const int TradeAbove = -10, RaidBelow = -20, TruceBelow = -40;
     // Until F22 leaders bring traits: Union cautious, Traders mercantile, Choir aggressive.
     public static readonly string[] Temperaments = ["cautious", "mercantile", "aggressive"];

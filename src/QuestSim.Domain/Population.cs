@@ -40,6 +40,10 @@ public sealed class Population
     public List<Settlement> Settlements { get; }
     public int[] SettlementFaction { get; }
     public int[] Residents { get; }   // living humans per home settlement, counted each step (the economy's workforce and mouths)
+    public int[] HourLosses { get; }  // people each settlement lost to the dead since the economy last looked (not saved)
+    // Settlements that draw hordes (valuable, intact ones; set by the economy between ticks). Null: hordes roam at random.
+    public int[]? Attractors { get; set; }
+    public const int AttractPercent = 40;
     readonly uint[] settleX, settleZ, adjOff, adj;
 
     // Game clock at 48:1: one population tick is 48 game seconds; the world starts at 08:00 on day one.
@@ -58,7 +62,7 @@ public sealed class Population
         (Settlements, var links) = city.Settlements();
         int s = Settlements.Count;
         settleX = Settlements.Select(x => ToMm(x.X)).ToArray(); settleZ = Settlements.Select(x => ToMm(x.Z)).ToArray();
-        Residents = new int[s];
+        Residents = new int[s]; HourLosses = new int[s];
         SettlementFaction = Settlements.Select(x => x.Spawn ? 0 : Hash4((uint)Seed, 77, (uint)x.Index, 0) % 10 == 0 ? Hostile : x.X < 0 ? 0 : 1).ToArray();
         var lists = Enumerable.Range(0, s).Select(_ => new List<uint>()).ToArray();
         foreach (var (a, b) in links) { lists[a].Add((uint)b); lists[b].Add((uint)a); }
@@ -104,8 +108,12 @@ public sealed class Population
         (uint)Math.Clamp((long)centre + hash % (2 * radius + 1) - radius, 0, 2L * CityGen.Half * 1000);
 
     // Hordes wander between settlements of their faction's territory (alternate settlements), never the spawn district.
+    // Zombies as a natural disaster: in 40% of their periods a horde heads for one of the attractors (the settlements whose
+    // loss would hurt most), otherwise it roams its territory.
     public uint HordeTarget(uint horde, uint tick)
     {
+        if (Attractors is { Length: > 0 } drawn && Hash4((uint)Seed, 10, horde, tick / HordePeriod) % 100 < AttractPercent)
+            return (uint)drawn[Hash4((uint)Seed, 11, horde, tick / HordePeriod) % (uint)drawn.Length];
         uint count = (uint)Settlements.Count, target = Hash4((uint)Seed, 9, horde, tick / HordePeriod) % count;
         if (target % 2 != horde % 2) target = (target + 1) % count;
         while (Settlements[(int)target].Spawn || target % 2 != horde % 2) target = (target + 2) % count;
@@ -202,11 +210,7 @@ public sealed class Population
             uint h = Hash4((uint)Seed, tick, i, 0xD00);
             if (zombie)
             {
-                uint horde = h % Hordes, edge = Mix(h) % 4, along = Mix(h ^ 1) % (2u * CityGen.Half * 1000);
-                uint far = 2u * CityGen.Half * 1000 - 500_000, near = 500_000;
-                PosX[i] = edge switch { 0 => near, 1 => far, _ => along };
-                PosZ[i] = edge switch { 2 => near, 3 => far, _ => along };
-                Info[i] = Zombie | ((uint)(HumanFactions + horde % 2) << 24) | horde;
+                ArriveAtEdge(i, h);
                 zombieGap--;
             }
             else
@@ -225,13 +229,18 @@ public sealed class Population
     // Away from players, zombies and humans in contact (5 m) may kill each other: a small deterministic chance per pair
     // and tick. Detailed agents belong to the authority and are skipped. Losses per settlement feed "attack" facts.
     public const uint EncounterRadius = 5_000;
-    public static uint HumanLossThreshold = (uint)(0.0005 * uint.MaxValue), ZombieLossThreshold = (uint)(0.0005 * uint.MaxValue);
+    public static uint HumanLossThreshold = (uint)(0.00025 * uint.MaxValue), ZombieLossThreshold = (uint)(0.00035 * uint.MaxValue);   // humans ~1%/game day
+    // The thresholds are per contact pair at 100,000 agents. Pairs grow with density, so they are scaled by population
+    // size to keep each person's risk the same at any scale (at 1M agents they would otherwise kill ~20% a game day).
+    public const int ReferenceCount = 100_000;
+    uint Scaled(uint threshold) => (uint)Math.Min(uint.MaxValue, (ulong)threshold * ReferenceCount / (ulong)Count);
     public Dictionary<int, int> SettlementLosses { get; } = new();
     public long ZombieLosses { get; private set; }
 
     void Encounters(uint tick, OrderablePartitioner<Tuple<int, int>> partitions)
     {
         bool night = Night(GameHour(tick * (double)GameSecondsPerTick));
+        uint humanCut = Scaled(HumanLossThreshold), zombieCut = Scaled(ZombieLossThreshold);
         var dying = new ConcurrentBag<uint>();
         var bitten = new ConcurrentBag<(uint Human, uint Zombie)>();
         ulong r2 = (ulong)EncounterRadius * EncounterRadius;
@@ -249,8 +258,8 @@ public sealed class Population
                             if ((Info[h] & Detailed) != 0 || IndoorsAt(h, night)) continue;
                             long dx = (long)PosX[h] - PosX[z], dz = (long)PosZ[h] - PosZ[z];
                             if ((ulong)(dx * dx + dz * dz) > r2) continue;
-                            if (Hash4((uint)Seed, tick, z, Mix(h) ^ 0xA00) < HumanLossThreshold) bitten.Add((h, z));
-                            if (Hash4((uint)Seed, tick, h, Mix(z) ^ 0xB00) < ZombieLossThreshold) dying.Add(z);
+                            if (Hash4((uint)Seed, tick, z, Mix(h) ^ 0xA00) < humanCut) bitten.Add((h, z));
+                            if (Hash4((uint)Seed, tick, h, Mix(z) ^ 0xB00) < zombieCut) dying.Add(z);
                         }
             }
         });
@@ -261,6 +270,7 @@ public sealed class Population
         {
             int home = (int)(Info[h] & 0xFFFFFF);
             SettlementLosses[home] = SettlementLosses.GetValueOrDefault(home) + 1;
+            HourLosses[home]++;
             if (Hash4((uint)Seed, tick, h, 0xC00) < RiseThreshold)
             {
                 Info[h] = Zombie | (Info[z] & (15u << 24)) | (Info[z] & 0xFFFFFF);
@@ -351,6 +361,37 @@ public sealed class Population
         int killed = 0;
         foreach (var (_, i) in victims.OrderBy(v => v.Hash).ThenBy(v => v.Agent).Take(count)) { Info[i] |= Dead; Residents[settlement]--; killed++; }
         return killed;
+    }
+
+    // The dead drift in from the countryside, 0.3-1.5 km outside the city, and join a horde. (They used to arrive at the
+    // map edges, 15-20 km out: at 0.5 m/s, about 900 m a game day, they never reached anyone.)
+    void ArriveAtEdge(uint i, uint h)
+    {
+        uint horde = h % Hordes;
+        long inner = CityGen.CityRadius + 300, outer = CityGen.CityRadius + 1500, x, z;
+        do   // integer rejection sampling in the ring, so every platform picks the same point
+        {
+            h = Mix(h + 0x9E3779B9);
+            x = (long)(h % (uint)(2 * outer + 1)) - outer;
+            z = (long)(Mix(h ^ 0x55) % (uint)(2 * outer + 1)) - outer;
+        } while (x * x + z * z < inner * inner || x * x + z * z > outer * outer);
+        PosX[i] = ToMm(x);
+        PosZ[i] = ToMm(z);
+        Info[i] = Zombie | ((uint)(HumanFactions + horde % 2) << 24) | horde;
+        TgtX[i] = PosX[i]; TgtZ[i] = PosZ[i]; MaskLo[i] = MaskHi[i] = 0;
+    }
+
+    // Once the dormant reserve is spent, a long-dead slot nobody refers to becomes a newcomer from the edges. Between ticks.
+    public void Migrate(uint i, uint hour) { ArriveAtEdge(i, Hash4((uint)Seed, hour, i, 36)); Arrived++; }
+
+    // A birth: a long-dead slot nobody refers to any more becomes a new person at home in a settlement. Only between ticks.
+    public void Reborn(uint i, int settlement, uint hour)
+    {
+        Info[i] = ((uint)SettlementFaction[settlement] << 24) | (uint)settlement;
+        PosX[i] = TgtX[i] = Offset(settleX[settlement], Hash4((uint)Seed, hour, i, 34), NightRadius);
+        PosZ[i] = TgtZ[i] = Offset(settleZ[settlement], Hash4((uint)Seed, hour, i, 35), NightRadius);
+        MaskLo[i] = MaskHi[i] = 0;
+        Residents[settlement]++;
     }
 
     // A refugee: new home (and its faction), walking there along the road. Only between ticks.

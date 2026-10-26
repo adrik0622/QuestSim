@@ -127,9 +127,12 @@ public static class LivingChecks
         var rival = SummonIndex(w, tide, alice.X + 32, alice.Z);
         int facts = w.State.Facts.Count;
         for (int k = 0; k < 400 && !mass.Dead && !rival.Dead; k++) w.Step();
-        check((mass.Dead || rival.Dead) && w.State.Facts.Skip(facts).Any(f => f.Kind == "horde-clash") &&
-              Enumerable.Range(0, 40).All(h => w.Pop.HordeTarget((uint)h, 0) % 2 == h % 2),
-            $"rival horde factions keep separate territories and fight where they meet ({Population.FactionNames[mass.Faction]} vs {Population.FactionNames[rival.Faction]})");
+        var drawn = w.Pop.Attractors;
+        w.Pop.Attractors = null;   // roaming only; attractors pull hordes out of their territory (checked with the economy)
+        bool territories = Enumerable.Range(0, 40).All(h => w.Pop.HordeTarget((uint)h, 0) % 2 == h % 2);
+        w.Pop.Attractors = drawn;
+        check((mass.Dead || rival.Dead) && w.State.Facts.Skip(facts).Any(f => f.Kind == "horde-clash") && territories,
+            $"roaming rival horde factions keep separate territories and fight where they meet ({Population.FactionNames[mass.Faction]} vs {Population.FactionNames[rival.Faction]})");
 
         var walker = Summon(w, true, alice.X + 40, alice.Z + 10);
         var local = Summon(w, false, alice.X + 42, alice.Z + 10, faction: 0);

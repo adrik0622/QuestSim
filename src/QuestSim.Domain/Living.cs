@@ -43,6 +43,7 @@ public sealed partial class WorldAuthority
     {
         Pop = new Population(City, State.Population);
         foreach (var d in State.AgentDeltas.Where(d => d.Dead)) Pop.Info[d.Index] |= Population.Dead;
+        RestoreAttractors();
     }
 
     void StepLiving()

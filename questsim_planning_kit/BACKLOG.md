@@ -87,9 +87,9 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
 - Done: ~10% of slots start dormant (fresh IDs for newcomers; IDs never reused). 30% of humans
   killed by zombies rise and join the killer's horde. Each coarse tick, a side below its starting
   strength wakes dormant agents (cap ≈ population/50,000 per tick): humans arrive at outlying
-  towns, zombies at the map edges. Rates are tunable; reserve exhaustion ends recovery.
+  towns, zombies just outside the city (since 2026-10-26; they used to arrive at the map edges and never reach anyone). Rates are tunable; reserve exhaustion ends recovery.
 - Outcome: losses refill over time so players can't exhaust the world: some zombie victims rise
-  as zombies, survivors arrive at outlying towns, zombies migrate in from the map edges; rates
+  as zombies, survivors arrive at outlying towns, zombies drift in from the countryside outside the city; rates
   are tunable and persisted.
 
 ### F17 - NPC pop-in and crowd placeholders — done 2026-10-26
@@ -125,6 +125,22 @@ hardship news is per faction and good. Saved (save v5). Headless soak; M debug m
 Soak-driven changes: road-by-road sharing was far too slow (clinic medicine spoiled while
 towns ran dry), so logistics is faction-wide; with no world surplus nobody could ever spare
 anything, so the world makes ~6% more food and ~12% more medicine than it needs.
+
+### F19b - Births and zombies as natural disasters (director 2026-10-26) — done 2026-10-26
+- Births: 1.5% of residents a day where people have 4+ days of food, order 50+, room under
+  capacity (150% of the starting residents) and no ruins. They reuse dead slots that no fact,
+  opportunity, ledger entry, named NPC or delta refers to, so "npc:N" always means one person.
+  Rationing (three-quarter meals under 2 days of food) lets stocks rebuild.
+- The dead: below their starting strength they drift in from the countryside just outside the
+  city (up to 4% a day; they used to arrive at the map edges and never reach anyone).
+- Great hordes: every 2 game days a 60% chance one moves on one of the three largest intact
+  farms, workshops or clinics; word spreads at once ("A great horde is moving on the clinic
+  ..."), drawn hordes head there, and 12 hours later it is overrun: 30% of stores destroyed,
+  output down 60%, order shaken; rebuilding restores 2%/hour with materials, slower without.
+  A rare emergent overrun also happens where losses pile up (siege pressure).
+- Encounter odds now scale with population size: at 1M agents zombies had been killing ~20% of
+  humans a game day (pairs grow with density); now ~1% at any scale.
+- Faction news (shortage/recovered) follows each faction's own total, saved per faction.
 
 ### F20 - Faction relations and daily decisions (step 2) — done 2026-10-26
 A relations grid (-100..100; drifts back a point a day); once per game day each human faction

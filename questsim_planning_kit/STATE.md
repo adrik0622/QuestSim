@@ -96,6 +96,16 @@ Choir stays a medicine-starved raiding cult (~30 raids a month); Union-Traders r
 near +20. Rumors such as "The Hollow Choir attacked the settlement at the plaza but were driven
 off." 150 domain checks. The debug map shows relations and each faction's last move.
 
-Next action: director playtest of F19/F20 (M map, rumors, faction news) or go on to F21
-(caravans and raid parties as travelling groups players can meet); decide the
-population-decline option above.
+2026-10-26 (F19b births and zombies as natural disasters; director chose births): births reuse
+unreferenced dead slots; the dead drift in from just outside the city; great hordes move on
+crucial settlements with a rumor first and overrun them 12 hours later; rebuilding uses
+materials. Found and fixed: zombie lethality grew with population density (20% of humans a
+game day at 1M agents vs 2% at 100k); encounter odds now scale with population (about 1% a
+day at any size). 40-day soak (now in test_all --all): the living and the dead both hold
+their numbers (67,328 -> 67,331 with 15,252 born; zombies 22,627 -> 22,609), 13 great hordes
+and 14 overruns, all rebuilt; a food blight starves the Traders from day 17 (94 settlements in
+unrest), they trade and raid and recover by day ~35. 156 domain checks.
+
+Next action: director playtest of F19/F19b/F20 (M map, rumors such as "A great horde is
+moving on ...", faction news), or F21 (caravans and raid parties as travelling groups players
+can meet). Tuning knobs are constants at the top of Economy.cs and Politics.cs.

@@ -10,7 +10,7 @@ public sealed partial class WorldAuthority
     public const long RumorLifetime = 3600;          // population ticks (2 game days at 48:1)
     public const double WitnessRadius = 150, AskReach = 3;
     public const int HostileBelow = -50;
-    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack", "shortage", "hardship", "trade", "raid", "truce"];
+    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack", "shortage", "hardship", "trade", "raid", "truce", "overrun", "threat"];
     public const int AttackFactThreshold = 10;
 
     // Background attrition becomes news when a settlement loses enough people in one coarse tick.
@@ -149,6 +149,9 @@ public sealed partial class WorldAuthority
         "attack" => $"The dead overran the settlement {Place(f.X, f.Z)}; {f.Object.Split(':')[2]} people were lost.",
         "shortage" => f.Object == "food" ? $"Food is running short among {SettlementFaction(f.Subject)}; people are going hungry {Place(f.X, f.Z)}."
             : $"{SettlementFaction(f.Subject, true)} are running out of {f.Object}; it's worst {Place(f.X, f.Z)}.",
+        "threat" => $"A great horde is moving on the {f.Object} {Place(f.X, f.Z)}.",
+        "overrun" => $"The dead overran the {f.Object} {Place(f.X, f.Z)}; it will take days to rebuild.",
+        "rebuilt" => $"The {f.Object} {Place(f.X, f.Z)} is working again.",
         "hardship" => f.Object switch
         {
             "food" => $"Blight has hit the fields of {SettlementFaction(f.Subject)}.",

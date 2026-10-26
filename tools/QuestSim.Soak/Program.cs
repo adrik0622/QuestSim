@@ -18,6 +18,7 @@ var city = new CityGen(seed);
 var pop = new Population(city, agents);
 var states = Economy.Create(pop, city);
 var factions = Politics.Create();
+var factionShort = new int[Population.HumanFactions];
 var actions = new List<FactionAction>();
 var moves = new Dictionary<string, int>();   // faction:kind -> count
 var factionEvents = new List<FactionEvent>();
@@ -27,7 +28,9 @@ var startResidents = FactionResidents();
 var timeline = new List<object>();
 var eventCounts = new Dictionary<string, int>();
 var crisisHours = new int[Economy.Goods];      // after day 3: hours a good was short in every human faction at once
-int refugees = 0, minOrder = 100, maxOrder = 0;
+int refugees = 0, minOrder = 100, maxOrder = 0, born = 0, overruns = 0, migrated = 0, lateOverruns = 0;
+long startZombies = pop.TargetZombies;
+int startHumans = pop.Residents.Sum();
 long hour = 0;
 var events = new List<EconomyEvent>();
 Map(0);
@@ -38,7 +41,7 @@ for (int day = 1; day <= days; day++)
         for (int t = 0; t < Economy.TicksPerHour; t++) pop.Step();
         var tally = new EconomyTally();
         events.Clear();
-        Economy.Hour(pop, states, ++hour, events, tally);
+        Economy.Hour(pop, states, ++hour, events, tally, null, factionShort);
         factionEvents.Clear();
         Politics.Hour(pop, states, factions, actions, hour, factionEvents);
         foreach (var e in factionEvents)
@@ -46,7 +49,8 @@ for (int day = 1; day <= days; day++)
             string key = $"{Population.FactionNames[e.From]}:{e.Kind}{(e.Kind == "raid" ? (e.Success ? "-took" : "-repelled") : "")}";
             moves[key] = moves.GetValueOrDefault(key) + 1;
         }
-        refugees += tally.Refugees;
+        refugees += tally.Refugees; born += tally.Born; overruns += tally.Overrun; migrated += tally.Migrated;
+        if (day > days / 2) lateOverruns += tally.Overrun;
         foreach (var e in events) eventCounts[$"{e.Kind}:{Economy.GoodNames[(int)e.Good]}"] = eventCounts.GetValueOrDefault($"{e.Kind}:{Economy.GoodNames[(int)e.Good]}") + 1;
         for (int g = 0; g < Economy.Goods; g++)
             if (day > 3 && Enumerable.Range(0, Population.HumanFactions).All(f => states.Any(s => pop.SettlementFaction[s.Index] == f && (s.Reported >> g & 1) != 0)))
@@ -56,7 +60,7 @@ for (int day = 1; day <= days; day++)
     var residents = FactionResidents();
     var record = new
     {
-        day, residents, humans = pop.Residents.Sum(), refugees,
+        day, residents, humans = pop.Residents.Sum(), refugees, born, overruns, ruined = states.Count(s => s.Damage >= Economy.RuinedDamage),
         relations = new[] { factions[0].Relations[1], factions[1].Relations[0], factions[0].Relations[2], factions[2].Relations[0], factions[1].Relations[2], factions[2].Relations[1] },
         lastMoves = factions.Take(Population.HumanFactions).Select(f => f.LastMove).ToArray(),
         shortFood = Enumerable.Range(0, n).Count(s => (states[s].Reported & 1) != 0),
@@ -70,7 +74,7 @@ for (int day = 1; day <= days; day++)
     };
     timeline.Add(record);
     Console.WriteLine($"day {day,3}: humans {record.humans,7:N0} by faction {string.Join("/", residents)}, short food {record.shortFood,3} medicine {record.shortMedicine,3} (by faction {string.Join("/", record.shortByFaction)}), " +
-        $"order {record.meanOrder} (unrest {record.unrest}), stock days {string.Join("/", record.daysOfStock)}, faction food days {string.Join("/", record.factionFoodDays)}, refugees {refugees:N0}, " +
+        $"order {record.meanOrder} (unrest {record.unrest}), stock days {string.Join("/", record.daysOfStock)}, faction food days {string.Join("/", record.factionFoodDays)}, refugees {refugees:N0}, born {born:N0}, zombies {pop.Members[3] + pop.Members[4]:N0} (+{migrated:N0} from the edges), overrun {overruns} (in ruins {record.ruined}), " +
         $"relations U-T {record.relations[0]}/{record.relations[1]} U-C {record.relations[2]}/{record.relations[3]} T-C {record.relations[4]}/{record.relations[5]}");
     if (day % mapEvery == 0 || day == days) Map(day);
 }
@@ -94,6 +98,11 @@ Check(Enumerable.Range(0, Population.HumanFactions).Any(a => Enumerable.Range(0,
     $"relations are not pinned at -100 everywhere (end: {string.Join(" ", factions.Take(3).Select(f => string.Join("/", f.Relations.Take(3))))})");
 for (int f = 0; f < Population.HumanFactions; f++)
     Check(endResidents[f] * 2 > startResidents[f], $"{Population.FactionNames[f]} keeps more than half its people ({startResidents[f]:N0} -> {endResidents[f]:N0})");
+Check(pop.Residents.Sum() * 100 >= startHumans * 85 && pop.Residents.Sum() * 100 <= startHumans * 130,
+    $"births keep the living population steady ({startHumans:N0} -> {pop.Residents.Sum():N0}; {born:N0} born, zombies {pop.Members[3] + pop.Members[4]:N0})");
+Check(overruns > 0 && eventCounts.Keys.Any(k => k.StartsWith("rebuilt")) && lateOverruns > 0,
+    $"the dead overrun settlements all along and they rebuild ({overruns} overruns, {lateOverruns} in the second half; {eventCounts.Where(e => e.Key.StartsWith("threat")).Sum(e => e.Value)} great hordes)");
+Check((pop.Members[3] + pop.Members[4]) * 100 >= startZombies * 70, $"the dead stay a force ({startZombies:N0} at the start, {pop.Members[3] + pop.Members[4]:N0} now; {migrated:N0} migrated in)");
 Check(minOrder >= 0 && maxOrder <= 100 && states.All(s => s.Stock.All(v => v >= 0)), $"order stays within 0-100 ({minOrder}-{maxOrder}) and no stock goes negative");
 return failures == 0 ? 0 : 1;
 

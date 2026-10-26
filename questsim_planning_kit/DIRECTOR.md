@@ -135,6 +135,12 @@ becomes a fact (and so rumors and opportunities); abstract decisions have physic
   fast-forwards weeks of history guards against degenerate outcomes (everyone starves, one
   faction eats the map).
 
+**Births and zombies as natural disasters (2026-10-26, subject to change):** populations are
+born, not only kept up by a reserve. Zombies act like natural disasters: hordes are drawn to
+the settlements whose loss hurts most (a faction's crucial farms, workshops and clinics), and
+crippling one ripples through logistics and trade to every faction that depended on it, and in
+time to the players (prices, scarcity, rumors; player trading arrives with F23).
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs

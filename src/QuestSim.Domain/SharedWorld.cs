@@ -101,6 +101,7 @@ public sealed class WorldSave
     public long EconomyTicks { get; set; }                          // coarse ticks the economy has seen
     public List<FactionState> FactionStates { get; set; } = new();  // F20 relations and last moves; empty until the first economy hour
     public List<FactionAction> FactionActions { get; set; } = new(); // F20 moves on their way
+    public int[] FactionShort { get; set; } = new int[QuestSim.Domain.Population.HumanFactions];   // per faction, a bit per good reported short
     [JsonRequired] public List<SupplyState> Supplies { get; set; } = InitialSupplies.ToList();
     [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<BuildReceipt> BuildReceipts { get; set; } = new();
@@ -394,9 +395,10 @@ public static class WorldStorage
             w.Characters.Select(c => c.ProfileId).Distinct().Count() != w.Characters.Count)
             throw new InvalidDataException("Invalid/duplicate character data");
         if (w.Settlements is null || w.EconomyTicks < 0 || w.Settlements.Select((s, i) => s is not null && s.Index == i && s.Profile is >= 0 and < 4 &&
-                s.Stock is { Length: Economy.Goods } && s.Stock.All(v => v >= 0) && s.Order is >= 0 and <= 100 && s.HoursHungry >= 0).Any(ok => !ok))
+                s.Stock is { Length: Economy.Goods } && s.Stock.All(v => v >= 0) && s.Order is >= 0 and <= 100 && s.HoursHungry >= 0 &&
+                s.Capacity >= 0 && s.Damage is >= 0 and <= 100 && s.Siege >= 0 && s.ThreatHour >= 0).Any(ok => !ok))
             throw new InvalidDataException("Invalid settlement economy");
-        if (w.FactionStates is null || w.FactionActions is null ||
+        if (w.FactionStates is null || w.FactionActions is null || w.FactionShort is not { Length: Population.HumanFactions } ||
             w.FactionStates.Count is not (0 or Politics.Count) || w.FactionStates.Select((f, i) => f is not null && f.Id == i && f.Relations is { Length: Politics.Count } &&
                 f.Relations.All(r => r is >= -100 and <= 100)).Any(ok => !ok) ||
             w.FactionActions.Any(a => a is null || a.Kind is not ("trade" or "raid") || a.Amount < 0 || a.ReturnAmount < 0 ||

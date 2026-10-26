@@ -74,6 +74,7 @@ public sealed partial class WorldAuthority
             Pop.Read(r);
             for (int s = 0; s < 64; s++) { slotFact[s] = r.ReadInt32(); slotStart[s] = r.ReadInt64(); slotCredibility[s] = r.ReadUInt32(); }
             foreach (var d in State.AgentDeltas.Where(d => d.Dead)) Pop.Info[d.Index] |= Population.Dead;
+            RestoreAttractors();
             PopulationLoad = "snapshot";
         }
         catch (Exception e) when (e is IOException or InvalidDataException or EndOfStreamException or UnauthorizedAccessException)
