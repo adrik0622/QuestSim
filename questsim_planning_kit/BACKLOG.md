@@ -76,8 +76,25 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
 ### F14 - Platform and CI (continuous)
 - Windows builds tested; CI runs domain checks and the CPU reference of the population simulation (no GPU needed thanks to bit-identical results) on every push. Discrete GPUs only (NVIDIA, AMD, Intel Arc); no integrated-GPU target. Population budget scales with host hardware; a CPU-only host runs a smaller world.
 
+### F15 - Extensive building system (planned; timing to be decided)
+- Outcome: replace the single Q02b cell with grid construction anywhere valid: walls, doors,
+  windows, containers and more, with data-defined pieces (mod surface), material costs,
+  demolition/refunds, ownership rules and effects on player movement and NPC navigation.
+- Keep: exactly-once costs and receipts, last-cell races, persistence and multiplayer convergence
+  from Q02b; the BACKLOG Q06 doorway/pathing acceptance applies once zombies path around walls.
+
+### F16 - Population recovery (director 2026-10-26)
+- Outcome: losses refill over time so players can't exhaust the world: some zombie victims rise
+  as zombies, survivors arrive at outlying towns, zombies migrate in from the map edges; rates
+  are tunable and persisted.
+
+### F17 - NPC pop-in and crowd placeholders
+- Avoid promoting NPCs right next to players (nobody appears out of nowhere at arm's length).
+- Stretch: stream nearby background (coarse) agents to clients at ~1 Hz as cheap placeholder
+  figures, so crowds look populated beyond the detail budget.
+
 ### Not in v1.0
-Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS.
+Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS, code mods (data-only for now; stay mindful of a later transition).
 
 ## Q00 - Bound the experiment
 

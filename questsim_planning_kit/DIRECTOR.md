@@ -105,6 +105,18 @@ player is offline. Permadeath is an optional server setting. The v1.0 world is o
 outskirt towns with roughly one million agents, about a tenth of what E1 showed one GPU can
 tick.
 
+**Playtest decisions (2026-10-26, subject to change):**
+- **Construction:** the single Q02b build cell is a placeholder. We plan a much more extensive
+  building system (grid walls, doors, containers and more, placed anywhere valid, with material
+  costs, demolition and effects on movement and NPC navigation). See BACKLOG F15.
+- **Mods:** data-only for now. Keep the design mindful of a possible later move to code mods
+  (namespaced IDs, manifests, a clear boundary between data and game logic), but build nothing
+  for code mods until a deliberate trust decision is made.
+- **Populations recover:** losses are refilled over time so players can't exhaust the world
+  (e.g. some zombie victims rise as zombies, survivors arrive at towns, zombies migrate in).
+- **NPC pop-in:** avoid promoting NPCs right next to players; drawing simple placeholders for
+  nearby background people is a stretch goal.
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs
