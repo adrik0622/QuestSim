@@ -15,7 +15,7 @@ The companion `QuestSim_Feasibility_and_Delivery_Plan.pdf` supplies background f
 - `RESEARCH_SOURCES.md`: primary sources and evidence caveats.
 - `benchmark_results.csv`: header-only measurements template. No results are fabricated.
 
-Provisional direction: Godot 4 .NET/C#, CPU authority, fixed camera, grid construction, two clients first and 2-8 for the prototype, persistent actor identities, coarse distant simulation and a bounded story director. Arbitrary digging triggers a separate engine evaluation; GPU compute is optional research.
+Provisional direction: Godot 4 .NET/C#, server authority with optional GPU bulk simulation (2026-10-25), fixed camera, grid construction, two clients first and 2-8 for the prototype, persistent actor identities, coarse distant simulation and a bounded story director. Arbitrary digging triggers a separate engine evaluation; GPU compute is optional research.
 
 All sizes and timings are proposed targets or estimates. The director must select actual hardware, working hours and acceptable approximations. Do not turn this plan into a release promise or claim that a paper proves the whole requested game.
 

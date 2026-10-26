@@ -1,35 +1,55 @@
-# Uploaded devlog visual evidence review - v0.2
+# Uploaded devlog review - v0.3 (narration transcribed)
 
-Source: `videoplayback.mp4`, supplied by the user, corresponding to https://www.youtube.com/watch?v=nuNqB2450go . Duration 39:15.8; resolution 640 x 360.
+Source: `videoplayback.mp4` (user-supplied, The Wayward Realms devlog "New year — new
+engine", OnceLost Games, https://www.youtube.com/watch?v=nuNqB2450go), 39:16, 640x360.
 
 ## Method and limits
 
-Sampled frames at one-minute intervals across the video, ten-second samples around 18-21 minutes, and selected exact frames. Inspected diagrams and readable on-screen text. This was not continuous audiovisual viewing. Audio exists in the file, but no speech recognition/transcription capability was available; exact spoken claims remain unverified. No throughput or FPS claims should be attributed from this review.
+2026-10-25: narration transcribed locally with Whisper large-v3 on GPU; frames sampled
+every 10s as contact sheets. Transcript and sheets stay in `.artifacts/video/` (not
+versioned: third-party content). Whisper mis-hears names ("Wheel of Drums" = The Wayward
+Realms, "Winsloss" = OnceLost). Everything below is **narrated claim** unless marked
+*shown*. No performance numbers, hardware or tick rates are given in the video.
 
-| Inspected timestamp | Visible evidence | Interpretation boundary |
-| --- | --- | --- |
-| 07:30-11:30 | Symbolic grid/map editor and terrain preview | Authoring representations are visible; generator speed and universal validity are unmeasured. |
-| 18:15-19:35 | Texture-like image, axes, actor/ID examples and a coordinate gizmo | Consistent with indexed numerical state; exact encoding and GPU operations are unresolved. |
-| 20:05 | 1024 labels on both axes of square image | 1,048,576 cells by arithmetic. One actor per texel is conditional; no complete-NPC throughput established. |
-| 20:25-20:55 | Line-like marks, a red cluster and chest illustration | Localized/changing information is illustrated; algorithm and cost unknown. |
-| 24:25-28:30 | Connected delivery, site, cargo, creatures/corpses, merchant, thieves, gold and NPC diagrams | Supports a relationship-oriented incident model. No proof here of an executable planner or autonomous simulation. |
-| 30:30 | Location/problem/want fields mapped to request prose | Structured facts and presentation can be separate. Text-generation implementation is not visible. |
-| 35:30-37:30 | Text code and node-based interface | Tools are visible; public API, mod stability and portability are not established. |
+| Time | Topic | Claim (narrated) | Shown on screen |
+| --- | --- | --- | --- |
+| 00:30-04:40 | Context | Left Unreal for own "Realm Engine"; month two; features over visuals. | Placeholder art. |
+| 06:24-12:20 | World editing | Rejects "procgen is the only tool for big worlds". Tile map editor: tiles ~10 m, biome painting, scatter mode mimicking pollen spread, civilization layer (huts) whose NPCs are *pulled from an NPC database*, not generated. Whole 500,000 km² archipelago saves/loads fast (<1 s after an edit). | Editor, biome/scatter painting, hut placement, fast load. |
+| 17:40-22:30 | Millions of NPCs | One pixel per NPC. Pixel index (row-major) = unique NPC ID. RGB = XYZ position. Processed with Vulkan; "0 to 254.999999" precision claimed as centimetre accuracy over 500,000 km². 1024² = ~1M NPCs per texture; GPU updates all in parallel; NPCs live at all times, near player or not. Range selection by RGB (position) lets an event (e.g. a city head dies) update all nearby NPCs "in the database"; rumors spread by proximity/talking, "if they believe it". Built as an external Vulkan service, easy to move between engines. | Diagram, 1024x1024 noise texture, streaks, a red cluster selection; old Unreal clip of spheres/NPCs walking. No rumor run shown. |
+| 22:30-28:50 | Dynamic quests | Graph database in engine. World tiles have unique IDs like pixels. Quest "botched delivery": merchant's tale creates rum + wolves (+ cart, gold) linked to tile 568 in the graph; detail materializes when the player visits. Existing tile facts change what is created (bears passed → wolf corpses). NPCs query the graph around what the player is connected to (thieves want valuables). Merchant also told other NPCs, who may loot first. Facts contract over time (bears don't stay forever), bounding growth; the player's actions become the most connected nodes; rumors about the player spread. | Animated node diagram only. |
+| 28:50-32:10 | Dialogue | Structured "location + problem + want" sentences from the graph, rephrased English→English by a translation (NLP) model; claimed "not generative": same facts, varied phrasing. | Template slide; in-build dialogue with a database NPC. |
+| 32:20-33:10 | Reputation | Faction reputation computed by walking the player's graph connections. | Placeholder journal/lexicon UI. |
+| 33:16-34:30 | Trees/fire | GPU procedural trees from per-species "genetic" rules; fire spreads tree to tree by wind and density. | Forest and fire footage. |
+| 34:40-37:50 | Modding | All game logic in AngelScript, open to modify; glTF assets; planned public map editor; Blueprint-like node tool that queries the game database. | VS Code, file tree, node editor. |
 
-## Documentation changes
+## Engineering assessment
 
-- Replace the old status "video only located" with "visual evidence inspected; narration pending".
-- Extend Q07 with one connected incident and conflicting concurrent player interventions.
-- Extend X02 with an optional 1024 x 1024 numeric texture layout compared fairly against CPU and storage-buffer variants.
-- Add a structured request -> ordinary format-string proof, where dialogue never owns world state.
-- Keep Godot/C#, CPU authority, modular building and bounded templates provisional. No new evidence here justifies forcing voxels, a custom renderer or a graph database.
+- **Texture = structure-of-arrays.** Colour is only storage; a 32-bit-per-channel texture
+  or storage buffer is equivalent. Precision check: 500,000 km² ≈ 707 km across; 1 cm needs
+  ~7.1e7 steps (~27 bits) per axis. Float32 (24-bit mantissa) gives ~6 cm at 700 km;
+  uint32 fixed-point gives sub-millimetre. Supports our integer/fixed-point rule.
+- **ID = slot index** ties identity to storage position. Never compact or reuse slots
+  without a generation counter, or saves/links break.
+- **Movement vs simulation.** Shown: points moving. Not shown: per-NPC decisions, needs,
+  conflicts. "1M points updated" is still not "1M complete NPCs" (ENGINE_RULES).
+- **Rumors.** The texture does the spatial query; knowledge lives in a database. A naive
+  range scan is O(N) per event; many concurrent carriers need spatial binning. The video
+  does not address CPU↔GPU readback/latency — our main open design constraint.
+- **Quests vs our invariants.** Creating rum/wolves/gold when the story is told, and
+  choosing wolf corpses retroactively, is story-time invention. DIRECTOR.md forbids the
+  director inventing resources or consequences. Compatible variant: the underlying event
+  (merchant flees, cart left at tile X) is a committed fact in the simulation; only the
+  detailed representation is materialized lazily and deterministically from facts + seed.
+- **Fact decay** fits beliefs/ephemeral traces; material facts (gold exists) end only via
+  explicit events.
+- **Editable coarse layers + procedural detail** (biome/civilization tiles, NPC database
+  independent of loading) is a good model for our "rudimentary procedural generation".
 
-## Additional prototype acceptance
+## Documentation consequences
 
-Represent an actual food delivery, cargo, carrier, site and knowledge through stable IDs and a few typed links. A failed delivery creates a shortage and an eligible recovery opportunity. Another player takes or relocates cargo before acceptance. Revalidation must adapt or expire the opportunity. No duplicated cargo/reward; save/reload preserves links. Implement with ordinary records/lists/dictionaries first.
-
-For texture capacity, explicitly distinguish allocated slots, valid actors, updated actors per step and full authoritative tick throughput. Document numerical formats and ID mapping. A colored visualization is not a precision specification.
-
-## Follow-up requiring narration
-
-Record exact timestamps and wording for GPU work, population, tick rate, hardware, CPU/GPU synchronization, persistence, mods and multiplayer. Distinguish narrated goals from measured demonstrations. Do not fill missing claims using forum descriptions.
+- DIRECTOR.md 2026-10-25: GPU bulk simulation allowed; CPU owns facts/ledgers.
+- Simulation experiments (population store, spread, tiers, factions incl. zombies) should
+  compare CPU reference vs GPU kernels end to end, including readback latency.
+- Q07 (story opportunities) keeps the no-retroactive-invention rule; lazy materialization
+  only from committed facts.
+- Dialogue never owns state; phrasing variation is presentation only (deferred).

@@ -23,7 +23,7 @@ Build a small, portable, moddable multiplayer zombie game that proves a living w
 - One authoritative server and fixed simulation ticks. Server validates commands; events describe committed outcomes.
 - Clients submit intent, render relevant state and interpolate. Introduce prediction/reconciliation as actual network play requires.
 - Content definitions and first-party gameplay use the supported mod surface.
-- CPU-only authority is required. A GPU experiment does not become a production dependency automatically.
+- One server authority. The CPU owns facts, ledgers and transactions; the server may use the GPU for bulk simulation (director, 2026-10-25). GPU kernels use integer/fixed-point data, keep a CPU reference route, and never block the authoritative tick on readback. Adoption of a specific GPU path still follows measured end-to-end evidence.
 
 Useful functions can initially be `ApplyCommand`, `StepWorld`, `GenerateChunk` and `SelectRelevantState`. Do not build a framework around their names.
 

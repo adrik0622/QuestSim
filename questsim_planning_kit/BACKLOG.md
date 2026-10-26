@@ -6,7 +6,7 @@ All timeboxes are approximate experienced-engineer effort, with placeholder asse
 
 - Owner: director and integration owner. Dependency: none. Timebox: 1-2 days.
 - Outcome: one-page scope contract with camera, excavation, players, target hardware, weekly capacity, player absence policy and acceptable approximation.
-- Confirmed: modular building, two clients first/2–8 validation/16 target, CPU authority, no digging. Low-poly 3D with first/third-person selected for Q01; broader structure remains open. DIRECTOR.md supersedes old defaults.
+- Confirmed: modular building, two clients first/2–8 validation/16 target, server authority (GPU allowed for bulk simulation since 2026-10-25), no digging. Low-poly 3D with first/third-person selected for Q01; broader structure remains open. DIRECTOR.md supersedes old defaults.
 - Deliver: contract, initial risk list and measurement scenarios.
 - Acceptance: the director can describe the first shared scene and its explicit exclusions.
 - Stop: unresolved camera or excavation scope means no large art/terrain investment yet. Research and basic authority work can continue.
@@ -118,7 +118,7 @@ build placement and network-condition experiments remain separate bounded tasks.
 
 ## X02 - Optional GPU operation
 
-- Owner: compute agent. Dependency: a measured CPU bottleneck and an equivalent reference operation. Timebox: 5-10 days; deployment may require a separate 3-5 day spike.
+- Owner: compute agent. Dependency: an equivalent CPU reference operation (a prior CPU bottleneck is no longer required; director 2026-10-25). Timebox: 5-10 days; deployment may require a separate 3-5 day spike.
 - Outcome: determine whether one homogeneous operation benefits from portable compute.
 - Implementation: Godot compute/storage buffers or field texture. Numeric formats, explicit IDs and synchronization. CPU authority validates/commits required outputs.
 - Compare: 10k/100k/1M benchmark records, density and output size; upload + dispatch + synchronization + readback + integration, not just kernel time. Include graphics contention and required network/save work.

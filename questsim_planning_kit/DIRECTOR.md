@@ -9,8 +9,19 @@ the world does not revolve around them. The director connects opportunities to
 actions/relationships while respecting persistent facts.
 
 No digging initially. Start with two clients, validate 2–8 for the initial slice,
-aim for 16; 32–64 are later experiments. CPU server authority is for consistency;
+aim for 16; 32–64 are later experiments. One server authority is for consistency;
 competition and anti-cheat are not priorities.
+
+**2026-10-25 (later): CPU-only authority removed.** The server may use the GPU for
+bulk simulation (population steps, fields, spread). The CPU remains the single owner
+of facts, ledgers and transactions (identity, inventory, deaths, faction resources,
+fact log) and validates/commits GPU results at coarse tick boundaries. Kernels use
+integer/fixed-point data and keep a CPU reference implementation for tests and
+fallback. CPU↔GPU transfer and readback latency is a design constraint: never block
+the authoritative tick on readback; consume results asynchronously and measure end
+to end. Large-scale world simulation (humans, zombies and their factions, including
+zombie factions/politics, rumor propagation) and rudimentary procedural generation
+are foundational for v1.0, explored through experiments with explicit compromises.
 
 Disconnected actors disappear and cannot be harmed while absent. Preserve identity,
 inventory and progression; validate safe re-entry after world changes. Empty servers

@@ -10,7 +10,7 @@ Read CURRENT_TASK.md and STATE.md. Read RUNBOOK.md for commands. Search relevant
 
 - Reuse an existing engine/library call or direct function. One-line solutions mean less machinery, not code golf.
 - Implement the current task only. No speculative interfaces, general frameworks, custom ECS, renderer, compiler or services. Justify new dependencies with a current need.
-- Experiment platform: Godot .NET/C#, plain domain data, CPU authority and modular construction. Q01 uses low-poly 3D with first/third-person; broader world structure remains a separate open decision. GPU and digging require separate scope decisions.
+- Experiment platform: Godot .NET/C#, plain domain data, one server authority (CPU owns facts/transactions; GPU allowed for bulk simulation) and modular construction. Q01 uses low-poly 3D with first/third-person; broader world structure remains a separate open decision. GPU and digging require separate scope decisions.
 - Stable IDs survive scene unloading. Clients submit intent; server validates state changes. Preserve resource accounting, life/death, save identity, mod manifests and shared facts.
 - Shipped content uses supported mod hooks. Missing mods cannot silently destroy saved data. The story director respects actual actors, resources and other players' changes.
 - Read required compatibility rules before changing IDs, saves, generation, messages or mod schemas. Read relevant GPU evidence rules before acceleration work.
