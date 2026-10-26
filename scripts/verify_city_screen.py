@@ -31,6 +31,9 @@ try:
     f.launch('server'); f.ready('server', 0)
     f.launch('alice', 'alice', headless=False, intent=True); f.ready('alice')
     f.command('alice', 1, 0); wait(lambda: me()['X'] > 2.8, 'door column', 15)
+    f.command('alice'); time.sleep(.3)
+    if me()['X'] > 3.4:   # a busy machine can overshoot toward the door jamb (x 4): step back into the gap
+        f.command('alice', -1, 0); wait(lambda: me()['X'] < 3.3, 'back into the doorway', 10); f.command('alice'); time.sleep(.2)
     f.command('alice', 0, 1); wait(lambda: me()['Z'] > 30, 'into the plaza', 20)
     f.command('alice', holdKeys=['Down']); time.sleep(.9)
     f.command('alice'); time.sleep(1.5)
