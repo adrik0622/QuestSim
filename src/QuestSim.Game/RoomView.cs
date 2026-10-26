@@ -11,9 +11,9 @@ public partial class RoomView : Node3D
     private readonly Label hud = new();
     private readonly Dictionary<string, Node3D> actors = new();
     private bool roomBuilt;
-    private MeshInstance3D supplyBox = null!;
-    private Label3D supplyLabel = null!;
-    public event Action<bool>? PickupRequested;
+    private readonly Dictionary<string, (MeshInstance3D Box, Label3D Label)> supplies = new();
+    private readonly HashSet<string> blocks = new();
+    public event Action? PickupRequested, BuildRequested, RetryRequested;
 
     public override void _Ready()
     {
@@ -38,16 +38,14 @@ public partial class RoomView : Node3D
     {
         float side = (float)state.HalfExtent * 2;
         Box(this, new Vector3(0, -.1f, 0), new Vector3(side, .2f, side), new Color(.25f, .28f, .3f));
-        foreach (var block in state.Blocks)
-            Box(this, new Vector3((float)block.X, (float)block.Height / 2, (float)block.Z),
-                new Vector3((float)block.Width, (float)block.Height, (float)block.Depth),
-                block.Id == "questsim:module" ? new Color(1, .8f, .15f) : new Color(.55f, .56f, .6f));
-        supplyBox = Box(this, new Vector3((float)state.Supply.X, .3f, (float)state.Supply.Z), new Vector3(.6f, .6f, .6f), new Color(.2f, .8f, .3f));
-        supplyLabel = new Label3D();
-        supplyLabel.Position = new Vector3((float)state.Supply.X, .9f, (float)state.Supply.Z);
-        supplyLabel.Billboard = BaseMaterial3D.BillboardModeEnum.Enabled;
-        supplyLabel.FontSize = 32; supplyLabel.PixelSize = .005f;
-        AddChild(supplyLabel);
+        var site = WorldSave.BuildSite; // Floor marker for the one build cell.
+        Box(this, new Vector3((float)site.X, .01f, (float)site.Z), new Vector3((float)site.Width, .02f, (float)site.Depth + .3f), new Color(.85f, .55f, .3f));
+        foreach (var supply in state.Supplies)
+        {
+            var label = new Label3D { Position = new Vector3((float)supply.X, .9f, (float)supply.Z), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 32, PixelSize = .005f };
+            AddChild(label);
+            supplies[supply.Id] = (Box(this, new Vector3((float)supply.X, .3f, (float)supply.Z), new Vector3(.6f, .6f, .6f), Colors.White), label);
+        }
         roomBuilt = true;
     }
     private Node3D CreateActor(ActorState state, bool local)
@@ -72,18 +70,28 @@ public partial class RoomView : Node3D
         foreach (var actor in actors.Values) actor.QueueFree();
         actors.Clear();
     }
-    public void UpdateWorld(WorldSnapshot? state, string ownId, string profile, string connection, int bandages, string itemMessage, double delta)
+    public void UpdateWorld(WorldSnapshot? state, string ownId, string profile, string connection, Dictionary<string, int>? inventory, string itemMessage, double delta)
     {
         Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move | Q/E turn/orbit | Up/Down tilt | C camera | R camera | F take | T retry\n" +
+            "WASD move | Q/E turn/orbit | Up/Down tilt | C camera | R camera | F take | B build | T retry\n" +
             $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s\n" +
-            $"Bandages: {bandages} | Crate: {state?.Supply.Count ?? 0} | {itemMessage}";
+            $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}";
         if (state is null) return;
         if (!roomBuilt) BuildRoom(state);
-        ((StandardMaterial3D)supplyBox.MaterialOverride).AlbedoColor = state.Supply.Count > 0 ? new Color(.2f, .8f, .3f) : new Color(.3f, .35f, .3f);
-        supplyLabel.Text = state.Supply.Count > 0 ? "Bandage crate" : "Empty crate";
+        // Blocks only appear (no demolition yet); draw any the server added since the last snapshot.
+        foreach (var block in state.Blocks.Where(b => blocks.Add(b.Id)))
+            Box(this, new Vector3((float)block.X, (float)block.Height / 2, (float)block.Z),
+                new Vector3((float)block.Width, (float)block.Height, (float)block.Depth),
+                block.Id == "questsim:module" ? new Color(1, .8f, .15f) : block.Id == WorldSave.BuildSite.Id ? new Color(.75f, .45f, .25f) : new Color(.55f, .56f, .6f));
+        foreach (var supply in state.Supplies)
+        {
+            var (box, label) = supplies[supply.Id];
+            bool panels = supply.ItemId == WorldSave.Panel;
+            ((StandardMaterial3D)box.MaterialOverride).AlbedoColor = supply.Count == 0 ? new Color(.3f, .35f, .3f) : panels ? new Color(.25f, .45f, .95f) : new Color(.2f, .8f, .3f);
+            label.Text = $"{(panels ? "Panel" : "Bandage")} crate ({supply.Count})";
+        }
         foreach (string id in actors.Keys.Except(state.Actors.Select(a => a.Id)).ToArray()) { actors[id].QueueFree(); actors.Remove(id); }
         foreach (var a in state.Actors)
         {
@@ -105,8 +113,9 @@ public partial class RoomView : Node3D
     public override void _UnhandledKeyInput(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
-        if (key.Keycode == Key.F) PickupRequested?.Invoke(false);
-        if (key.Keycode == Key.T) PickupRequested?.Invoke(true);
+        if (key.Keycode == Key.F) PickupRequested?.Invoke();
+        if (key.Keycode == Key.B) BuildRequested?.Invoke();
+        if (key.Keycode == Key.T) RetryRequested?.Invoke();
         if (key.Keycode == Key.C) firstPerson = !firstPerson;
         if (key.Keycode == Key.R) { Yaw = -Mathf.Pi / 2; elevation = .65f; }
     }

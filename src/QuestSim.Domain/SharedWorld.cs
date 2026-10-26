@@ -30,7 +30,7 @@ public sealed class WorldSave
     public static readonly SupplyState[] InitialSupplies =
     {
         new("questsim:starter-crate", "questsim:bandage", -3, -1.5, 1),
-        new("questsim:panel-crate", Panel, -4, -1.5, 2)
+        new("questsim:panel-crate", Panel, -3, 1.5, 2)
     };
     public static readonly BlockRecord BuildSite = new("questsim:build-cell-1", -4, 1.5, 1, .25, 2);
     [JsonRequired] public int Version { get; set; } = 3;

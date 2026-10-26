@@ -22,13 +22,15 @@ public partial class Session : Node
     private long sequence, commandSerial;
     private long? testSequence;
     private Profile profile = null!;
-    private string profilePath = "";
+    private string profilePath = "", capturePath = "";
     private PickupReceipt? lastPickup;
-    private string itemMessage = "F takes a bandage from the green crate; T retries your last attempt.";
+    private BuildReceipt? lastBuild;
+    private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
     private string PathOption(string key, string fallback = "") => Option(key, fallback) is var value && value.Length > 0 ? Path.GetFullPath(value, Workspace) : "";
-    private sealed record Profile(string Id, string Name, string LastPickupRequestId = "", string LastPickupContainerId = "");
+    private sealed record Profile(string Id, string Name, string LastPickupRequestId = "", string LastPickupContainerId = "",
+        string LastBuildRequestId = "", string LastBuildSiteId = "", string LastAction = "");
     private sealed class TestIntent
     {
         public long Serial { get; set; }
@@ -40,6 +42,11 @@ public partial class Session : Node
         public string PickupRequestId { get; set; } = "";
         public string ContainerId { get; set; } = "";
         public bool RetryPickup { get; set; }
+        public string BuildRequestId { get; set; } = "";
+        public string SiteId { get; set; } = "";
+        public bool RetryBuild { get; set; }
+        public string[] Keys { get; set; } = [];
+        public string Capture { get; set; } = "";
     }
 
     public override void _Ready()
@@ -87,9 +94,11 @@ public partial class Session : Node
                     JsonSerializer.Serialize(profileFile, profile);
                     profileFile.Flush(flushToDisk: true);
                 }
-                if (!Guid.TryParseExact(profile.Id, "N", out _) || profile.LastPickupRequestId is null ||
-                    (profile.LastPickupRequestId.Length > 0 && (!Guid.TryParseExact(profile.LastPickupRequestId, "N", out _) ||
-                    string.IsNullOrWhiteSpace(profile.LastPickupContainerId) || profile.LastPickupContainerId.Length > 128))) throw new InvalidDataException("Invalid local profile identity");
+                static bool ValidLast(string? id, string? target) => id is not null && (id.Length == 0 ||
+                    (Guid.TryParseExact(id, "N", out _) && !string.IsNullOrWhiteSpace(target) && target.Length <= 128));
+                if (!Guid.TryParseExact(profile.Id, "N", out _) || !ValidLast(profile.LastPickupRequestId, profile.LastPickupContainerId) ||
+                    !ValidLast(profile.LastBuildRequestId, profile.LastBuildSiteId) || profile.LastAction is not ("" or "pickup" or "build"))
+                    throw new InvalidDataException("Invalid local profile identity");
                 profileId = profile.Id;
                 intentPath = PathOption("intent-file"); // Explicit opt-in for headless acceptance, never server state injection.
                 Multiplayer.ConnectedToServer += OnConnected;
@@ -101,7 +110,9 @@ public partial class Session : Node
                     DisplayServer.WindowSetTitle("QuestSim Shared Room");
                     view = new RoomView();
                     AddChild(view);
-                    view.PickupRequested += retry => RequestPickup(retry);
+                    view.PickupRequested += () => RequestPickup(false);
+                    view.BuildRequested += () => RequestBuild(false);
+                    view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
                 }
             }
             if (error != Error.Ok) throw new InvalidOperationException($"ENet startup failed: {error}");
@@ -198,20 +209,97 @@ public partial class Session : Node
             if (requestId.Length == 0) requestId = Guid.NewGuid().ToString("N");
             if (!Guid.TryParseExact(requestId, "N", out var id)) { itemMessage = "Invalid pickup request."; return; }
             requestId = id.ToString("N");
-            if (containerId.Length == 0) containerId = snapshot.Supply.Id;
+            if (containerId.Length == 0) containerId = NearestCrate().Id;
             if (containerId.Length > 128) { itemMessage = "Invalid crate."; return; }
-            var pending = profile with { LastPickupRequestId = requestId, LastPickupContainerId = containerId };
-            try { WorldStorage.WriteAtomic(profilePath, JsonSerializer.Serialize(pending)); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                itemMessage = "Could not save pickup request; no item taken.";
-                GD.Print("LOCAL_REQUEST_SAVE_FAILED ", e.Message);
-                return;
-            }
-            profile = pending;
+            if (!SaveProfile(profile with { LastPickupRequestId = requestId, LastPickupContainerId = containerId, LastAction = "pickup" }, "pickup", "no item taken")) return;
         }
-        itemMessage = retry ? "Retrying pickup..." : "Trying to take bandage...";
+        itemMessage = retry ? "Retrying pickup..." : "Trying to take from crate...";
         RpcId(1, nameof(TakeItem), requestId, containerId);
+    }
+
+    // Prefer a stocked crate within reach, then the nearest crate; the server still validates both.
+    private SupplyState NearestCrate()
+    {
+        var me = snapshot!.Actors.FirstOrDefault(a => a.Id == own!.Id);
+        double Distance(SupplyState s) => me is null ? 0 : Math.Pow(me.X - s.X, 2) + Math.Pow(me.Z - s.Z, 2);
+        return snapshot.Supplies.OrderBy(s => s.Count > 0 && Distance(s) <= 4 ? 0 : 1).ThenBy(Distance).First();
+    }
+
+    private bool SaveProfile(Profile pending, string kind, string consequence)
+    {
+        try { WorldStorage.WriteAtomic(profilePath, JsonSerializer.Serialize(pending)); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            itemMessage = $"Could not save {kind} request; {consequence}.";
+            GD.Print("LOCAL_REQUEST_SAVE_FAILED ", e.Message);
+            return false;
+        }
+        profile = pending;
+        return true;
+    }
+
+    private void RequestBuild(bool retry, string requestId = "", string siteId = "")
+    {
+        if (!connected || own is null || snapshot is null) return;
+        if (retry)
+        {
+            requestId = profile.LastBuildRequestId;
+            siteId = profile.LastBuildSiteId;
+            if (requestId.Length == 0) { itemMessage = "No build to retry yet."; return; }
+        }
+        else
+        {
+            if (requestId.Length == 0) requestId = Guid.NewGuid().ToString("N");
+            if (!Guid.TryParseExact(requestId, "N", out var id)) { itemMessage = "Invalid build request."; return; }
+            requestId = id.ToString("N");
+            if (siteId.Length == 0) siteId = WorldSave.BuildSite.Id;
+            if (siteId.Length > 128) { itemMessage = "Invalid build site."; return; }
+            if (!SaveProfile(profile with { LastBuildRequestId = requestId, LastBuildSiteId = siteId, LastAction = "build" }, "build", "nothing built")) return;
+        }
+        itemMessage = retry ? "Retrying build..." : "Placing wall panel...";
+        RpcId(1, nameof(PlaceWall), requestId, siteId);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void PlaceWall(string requestId, string siteId)
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        BuildReceipt receipt;
+        try { receipt = authority.PlaceWall(peer, requestId, siteId); }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException)
+        {
+            var invalid = new BuildReceipt(requestId, "", siteId, false, "invalid_request", 0);
+            RpcId(peer, nameof(BuildReply), JsonSerializer.Serialize(invalid), "{}");
+            return;
+        }
+        try
+        {
+            // Wall, spent panel and receipt share one atomic save. Never acknowledge before it succeeds.
+            WorldStorage.Save(savePath, authority.State);
+            RpcId(peer, nameof(BuildReply), JsonSerializer.Serialize(receipt), JsonSerializer.Serialize(authority.CharacterFor(peer).Inventory));
+            Publish();
+            WriteStatus();
+            GD.Print($"BUILD_RESULT actor={receipt.ActorId} request={receipt.RequestId} result={receipt.Reason}");
+        }
+        catch (Exception e) { Fail(e); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void BuildReply(string receiptJson, string inventoryJson)
+    {
+        if (server || own is null) return;
+        lastBuild = JsonSerializer.Deserialize<BuildReceipt>(receiptJson, WorldStorage.JsonOptions) ?? throw new InvalidDataException("Empty build receipt");
+        if (lastBuild.ActorId == own.Id)
+            own.Inventory = JsonSerializer.Deserialize<Dictionary<string, int>>(inventoryJson) ?? throw new InvalidDataException("Missing inventory");
+        itemMessage = lastBuild.Reason switch
+        {
+            "placed" => "Wall panel placed.", "occupied" => "Someone already built there.",
+            "no_material" => "You need a wall panel from the blue crate.", "out_of_reach" => "Move closer to the build cell.",
+            "blocked" => "A player is standing in the build cell.", "unknown_site" => "That build site is unavailable.",
+            _ => "Build request rejected."
+        };
+        GD.Print($"BUILD_REPLY request={lastBuild.RequestId} result={lastBuild.Reason}");
     }
 
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
@@ -223,7 +311,7 @@ public partial class Session : Node
         try { receipt = authority.TakeItem(peer, requestId, containerId); }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException)
         {
-            var invalid = new PickupReceipt(requestId, "", containerId, "questsim:bandage", false, "invalid_request", 0);
+            var invalid = new PickupReceipt(requestId, "", containerId, "", false, "invalid_request", 0);
             RpcId(peer, nameof(ItemReply), JsonSerializer.Serialize(invalid), "{}");
             return;
         }
@@ -248,8 +336,8 @@ public partial class Session : Node
             own.Inventory = JsonSerializer.Deserialize<Dictionary<string, int>>(inventoryJson) ?? throw new InvalidDataException("Missing inventory");
         itemMessage = lastPickup.Reason switch
         {
-            "taken" => "Bandage taken.", "empty" => "The crate is empty.",
-            "out_of_reach" => "Move closer to the green crate.", "unknown_container" => "That crate is unavailable.",
+            "taken" => lastPickup.ItemId == WorldSave.Panel ? "Wall panel taken." : "Bandage taken.", "empty" => "The crate is empty.",
+            "out_of_reach" => "Move closer to the crate.", "unknown_container" => "That crate is unavailable.",
             "inventory_full" => "Cannot carry more bandages.", _ => "Pickup request rejected."
         };
         GD.Print($"ITEM_REPLY request={lastPickup.RequestId} result={lastPickup.Reason}");
@@ -322,9 +410,27 @@ public partial class Session : Node
         desiredX = command.X; desiredZ = command.Z; desiredHeading = command.Heading; testSequence = command.Sequence;
         if (command.PickupRequestId.Length > 0 || command.RetryPickup)
             RequestPickup(command.RetryPickup, command.PickupRequestId, command.ContainerId);
+        if (command.BuildRequestId.Length > 0 || command.RetryBuild)
+            RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
+        // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.
+        foreach (string name in command.Keys)
+        {
+            var key = Enum.Parse<Key>(name, ignoreCase: true);
+            Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = true });
+            Input.ParseInputEvent(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
+        }
+        if (command.Capture.Length > 0) capturePath = Path.GetFullPath(command.Capture, Workspace);
         if (command.Quit) GetTree().Quit();
     }
-    public override void _Process(double delta) => view?.UpdateWorld(own is null ? null : snapshot, own?.Id ?? "", profileName, connection, own?.Inventory.GetValueOrDefault("questsim:bandage") ?? 0, itemMessage, delta);
+    public override void _Process(double delta)
+    {
+        view?.UpdateWorld(own is null ? null : snapshot, own?.Id ?? "", profileName, connection, own?.Inventory, itemMessage, delta);
+        if (capturePath.Length == 0 || view is null) return;
+        // Viewport capture for Xvfb screen tests; written beside, then renamed so readers never see a partial PNG.
+        GetViewport().GetTexture().GetImage().SavePng(capturePath + ".tmp.png");
+        File.Move(capturePath + ".tmp.png", capturePath, overwrite: true);
+        capturePath = "";
+    }
 
     private void WriteStatus()
     {
@@ -334,7 +440,7 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, receipts = authority?.State.Receipts, lastPickup, itemMessage, fps = Engine.GetFramesPerSecond(),
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));
     }

@@ -10,6 +10,7 @@ import uuid
 from verify_multiplayer import NetworkFixture, wait, read, atomic
 
 ITEM = 'questsim:bandage'
+CRATE = 'questsim:starter-crate'  # F would choose the nearest stocked crate; item tests target bandages.
 
 
 def reply(f, label, request):
@@ -32,15 +33,15 @@ def run_race():
         wait(lambda: f.status('alice')['active']==2 and f.status('server')['active']==2,'both registered')
         # A local write failure must prevent even sending the pickup request.
         blocked = Path(str(f.profiles/'alice.json')+'.tmp'); blocked.mkdir()
-        f.command('alice',pickupRequestId=uuid.uuid4().hex)
+        f.command('alice',pickupRequestId=uuid.uuid4().hex,containerId=CRATE)
         wait(lambda: f.status('alice')['itemMessage'].startswith('Could not save pickup request'),'local request save failure')
-        assert f.status('server')['snapshot']['Supply']['Count']==1 and len(f.status('server')['receipts'])==0
+        assert f.status('server')['snapshot']['Supplies'][0]['Count']==1 and len(f.status('server')['receipts'])==0
         blocked.rmdir()
         passed('client request persistence failure sends no item transaction')
         ids = {'alice':uuid.uuid4().hex,'bob':uuid.uuid4().hex}
         barrier=threading.Barrier(2)
         def attempt(label):
-            barrier.wait(timeout=3); f.command(label,pickupRequestId=ids[label])
+            barrier.wait(timeout=3); f.command(label,pickupRequestId=ids[label],containerId=CRATE)
         with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(attempt,['alice','bob']))
         results={label:reply(f,label,ids[label]) for label in ids}
@@ -48,10 +49,10 @@ def run_race():
         winner=next(label for label,r in results.items() if r['Success'])
         loser=next(label for label,r in results.items() if not r['Success'])
         assert results[loser]['Reason']=='empty'
-        wait(lambda: all(f.status(label)['snapshot']['Supply']['Count']==0 for label in ['server','alice','bob']), 'empty crate converges')
+        wait(lambda: all(f.status(label)['snapshot']['Supplies'][0]['Count']==0 for label in ['server','alice','bob']), 'empty crate converges')
         assert quantity(f,winner)==1 and quantity(f,loser)==0
         saved=read(f.save)
-        assert len(saved['Receipts'])==2 and saved['Supply']['Count']==0
+        assert len(saved['Receipts'])==2 and saved['Supplies'][0]['Count']==0
         assert sum(c['Inventory'].get(ITEM,0) for c in saved['Characters'])==1
         passed('simultaneous independent clients get exactly one saved transfer and both see empty stock')
         for label in ids:
@@ -66,7 +67,7 @@ def run_race():
         assert quantity(f,winner)==1 and len(read(f.save)['Receipts'])==2
         passed('conflicting request payload cannot overwrite a successful receipt')
         # Restore the real last attempt, then reconnect with the same persisted request identity.
-        f.command(winner,pickupRequestId=ids[winner])
+        f.command(winner,pickupRequestId=ids[winner],containerId=CRATE)
         wait(lambda: f.status(winner)['lastPickup']==original,'original request still valid')
         identity=f.status(winner)['ownId']
         f.close(winner)
@@ -83,10 +84,10 @@ def run_race():
         f.launch('server-return'); f.ready('server-return',0)
         for label in ids:
             client=label+'-restart'; f.launch(client,label); f.ready(client)
-            f.command(client,pickupRequestId=ids[label])
+            f.command(client,pickupRequestId=ids[label],containerId=CRATE)
             assert reply(f,client,ids[label])==results[label]
         assert quantity(f,winner+'-restart')==1 and quantity(f,loser+'-restart')==0
-        assert read(f.save)['Supply']['Count']==0 and len(read(f.save)['Receipts'])==2
+        assert read(f.save)['Supplies'][0]['Count']==0 and len(read(f.save)['Receipts'])==2
         passed('server restart preserves the one-item result and both successful/failed receipts')
         for label in ids: f.close(label+'-restart')
         wait(lambda: f.status('server-return')['active']==0,'restart clients absent')
@@ -111,7 +112,7 @@ def run_recovery(fail_save):
         else:
             # Stop server first: the client cannot possibly receive a reply yet.
             f.processes['server'][0].send_signal(signal.SIGSTOP)
-        f.command('alice',pickupRequestId=request)
+        f.command('alice',pickupRequestId=request,containerId=CRATE)
         if not fail_save:
             wait(lambda: json.loads((f.profiles/'alice.json').read_text()).get('LastPickupRequestId')==request, 'pending request durable')
             time.sleep(.2)  # Let the client flush the reliable packet while server is stopped.
@@ -122,7 +123,7 @@ def run_recovery(fail_save):
             wait(lambda: f.status('alice')['snapshot'] is None,'failed-save server disconnected')
             assert f.status('alice')['lastPickup'] is None
             saved=read(f.save)
-            assert saved['Supply']['Count']==1 and not saved['Receipts'] and not saved['Characters'][0]['Inventory']
+            assert saved['Supplies'][0]['Count']==1 and not saved['Receipts'] and not saved['Characters'][0]['Inventory']
             assert 'Session.TakeItem' in (f.directory/'server.log').read_text()
             obstruction.rmdir()
             print('PASS failed server save never acknowledges success or replaces the valid world',flush=True)
@@ -143,7 +144,7 @@ def run_recovery(fail_save):
         f.command('alice-return',retryPickup=True)
         result=reply(f,'alice-return',request)
         assert result['Success'] and quantity(f,'alice-return')==1
-        assert read(f.save)['Supply']['Count']==0 and len(read(f.save)['Receipts'])==1
+        assert read(f.save)['Supplies'][0]['Count']==0 and len(read(f.save)['Receipts'])==1
         print('PASS', 'retry after failed commit transfers once' if fail_save else 'lost-reply retry after restart returns the prior result without duplication',flush=True)
         f.close('alice-return'); wait(lambda:f.status('server-return')['active']==0,'recovered client absent')
         f.close('server-return',server=True)
@@ -169,15 +170,15 @@ def run_migration():
         f.launch('legacy','legacy'); client=f.ready('legacy',1)
         assert client['ownId']==actor_id and client['own']['Inventory']=={ITEM:4,'example:keepsake':2} and client['own']['Experience']==9
         migrated=read(f.save)
-        assert migrated['Version']==2 and migrated['Blocks']==original['Blocks'] and migrated['Tick']>=70
-        request=uuid.uuid4().hex; f.command('legacy',pickupRequestId=request)
+        assert migrated['Version']==3 and migrated['Blocks']==original['Blocks'] and migrated['Tick']>=70
+        request=uuid.uuid4().hex; f.command('legacy',pickupRequestId=request,containerId=CRATE)
         assert reply(f,'legacy',request)['Success'] and quantity(f,'legacy')==5
         f.close('legacy'); wait(lambda:f.status('server')['active']==0,'legacy client absent');f.close('server',server=True)
         f.launch('server-return');f.ready('server-return',0)
         f.launch('legacy-return','legacy');f.ready('legacy-return',1)
         f.command('legacy-return',retryPickup=True)
         assert reply(f,'legacy-return',request)['Success'] and quantity(f,'legacy-return')==5
-        assert read(f.save)['Supply']['Count']==0 and len(list(f.directory.glob('*.bak')))==1
+        assert read(f.save)['Supplies'][0]['Count']==0 and len(list(f.directory.glob('*.bak')))==1
         print('PASS real Q01 save and two-field profile migrate with exact backup and retained identities/items/world geometry',flush=True)
         print('PASS migrated v2 restart never restocks or repeats the bandage transfer',flush=True)
         f.close('legacy-return');wait(lambda:f.status('server-return')['active']==0,'legacy return absent');f.close('server-return',server=True)
