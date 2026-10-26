@@ -87,6 +87,18 @@ kernels written as GLSL compute shaders. No Metal or D3D12-specific work is plan
 
 **Game time (2026-10-26):** 48:1 (Valheim-like): one game day = 30 real minutes; a server setting, revisited in playtests.
 
+**Hosting and GPUs (2026-10-26):** discrete GPUs only (NVIDIA, AMD, Intel Arc; Vulkan
+1.2); integrated GPUs are not a target. The world's population budget scales with the host's
+hardware; a host without a GPU uses the CPU path and a smaller world. 64-bit shader integers
+are allowed for transient math such as sort keys; per-agent stored data stays ≤ 32-bit for
+bandwidth; 64-bit atomics only if truly needed.
+
+**v1.0 scope (2026-10-26):** v1.0 is the foundation we can build on incrementally (BACKLOG.md
+"v1.0 foundation plan"). It includes rudimentary RPG stats shared by players and NPCs; defeat
+instead of death (capture/abduction, buffs/debuffs, revenge and rescue); and a deterministic
+Virtual Game Master that ties facts into opportunities. Item rarity and per-item stats are
+kept in mind in the data model but not built for v1.0.
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs

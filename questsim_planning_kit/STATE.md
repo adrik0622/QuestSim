@@ -38,5 +38,5 @@ Results: Q02B_RESULTS.md. Handoff: ../HANDOFF_2026-10-25.md.
 Silk.NET (Godot headless has no RenderingDevice). 12 checks pass incl. CPU vs GPU
 bit-identical every tick. ~10⁷ agents at 1 tick/s on RTX 3080 Ti with zero authority
 wait; 10⁸ is 15–30 s/tick because neighbour reads lack locality.
-Next action (awaiting director): E1b, sort agents by grid cell for locality, then
-E2 detail tiers. Everything is experimental; game time 48:1.
+Next action: v1.0 foundation plan F1–F14 in BACKLOG.md (2026-10-26). Proposed next
+CURRENT_TASK: F1/E1b population locality, awaiting director go-ahead.

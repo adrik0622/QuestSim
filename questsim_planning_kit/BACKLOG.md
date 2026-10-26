@@ -2,6 +2,81 @@
 
 All timeboxes are approximate experienced-engineer effort, with placeholder assets. They are probes, not additive calendar commitments. Integration and rework account for the larger milestone ranges in the brief. Each task ends with a runnable result, raw evidence and a keep/change/stop decision.
 
+## v1.0 foundation plan (director, 2026-10-26)
+
+v1.0 is the **foundation** we can add content to for months without rewriting what's
+underneath. It isn't a content-complete game. This plan supersedes the ordering of the
+older Q/X entries below, which remain as reference. Everything is experimental: each step
+is a bounded experiment or increment with checks, measurements and a keep/change/stop
+note. Results go in `*_RESULTS.md`; one step at a time goes into CURRENT_TASK.md.
+
+**Order (revisited after every step):** F1 → F2 → F3/F4 → F5/F6 → F7 → F8 → F9 → F10 → F11 → F12,
+with F13 tooling and F14 platform/CI growing alongside from F2 onward.
+
+### F1 - E1b: population locality
+- Outcome: sort agents (or a cell-ordered copy of hot fields) by grid cell each tick so neighbour reads are contiguous.
+- Acceptance: still bit-identical to the CPU reference; measure 10⁷ and 10⁸ at constant density against E1 (15.2 s/tick at 10⁸).
+- Note: 64-bit integers allowed for sort keys and transient math; per-agent stored data stays ≤ 32-bit.
+
+### F2 - E2: detail tiers and NPC data layout
+- Outcome: agents move between the coarse GPU tick (far) and full 20 Hz detail (near players) without loss, duplication or reset.
+- Data layout: **generated** (seed + ID, 0 B: name, looks, personality, backstory, base stats); **hot** (GPU, 32–64 B: position, target, faction, activity, rumor bits, a few urgent needs); **warm** (CPU, 128–512 B: needs, job, stats/skills, inventory summary, ≤ 8 strong ties); **cold** (disk, sparse: real items, memories, debts, injuries). Store only deltas from generated defaults. No N×N relationships; group attitudes plus a few personal ties.
+- Acceptance: repeated promote/demote round-trips are identical; two players far apart each get local detail; save/reload keeps tiers consistent.
+
+### F3 - World space and rudimentary generation
+- Outcome: a seeded, versioned region (settlements, roads, biome tiles) split into chunks the client streams. Editable coarse layers, with procedural detail on top (OnceLost-style).
+- Acceptance: the same seed produces the same world; two players can be kilometres apart; generator version is stored in saves.
+- Decision needed: v1.0 world size (tens vs hundreds of km²).
+
+### F4 - Persistence at scale
+- Outcome: chunked, incremental binary saves (no full rewrite per autosave), crash recovery, versioned migration, carrying forward the Q01/Q02 guarantees (atomic writes, fail closed, backups before migration).
+- Acceptance: 10⁷-agent world autosaves without stalling the authority tick; kill -9 mid-save recovers; one real migration.
+
+### F5 - Integration: GPU population inside the server
+- Outcome: the Vulkan population tick runs in the server process beside the 20 Hz authority; nearby agents appear in clients.
+- Acceptance: the authority tick budget holds with the population running; CPU fallback for hosts without a GPU (smaller world).
+
+### F6 - Networking at scale
+- Outcome: interest management (clients receive only relevant nearby state), binary snapshots, protocol versioning.
+- Acceptance: 2–8 players over LAN with bandwidth and tick-time measurements; late join and reconnect converge.
+
+### F7 - Living actors and rudimentary RPG stats
+- Outcome: zombies notice, chase, attack and die; humans run simple routines. A small shared stat block for players and NPCs (for example health, stamina, strength, agility, perception, plus a few skills), using the same rules for everyone. NPC base stats are generated from seed + ID; changes are stored as deltas.
+- Acceptance: deterministic combat outcomes in domain checks; stats persist through tiers, reconnects and restarts; deaths are facts with provenance.
+- Keep stats data-defined (namespaced IDs) so later systems can add stats without schema rewrites.
+
+### F8 - Facts and knowledge
+- Outcome: a persisted fact graph (who, what, where, typed links) plus rumor beliefs; NPCs answer "what have you heard?" from their actual beliefs (template text; dialogue never owns state).
+- Acceptance: beliefs never alter facts; a player-caused event becomes a fact and is heard elsewhere later; save/reload preserves both.
+
+### F9 - Factions (humans and zombies)
+- Outcome: one generic faction model: members, real resources, territory, attitudes, simple goals. Zombie hordes use the same model (factions and internal politics). One consequence loop.
+- Acceptance: resources are conserved; a faction responds to a fact using real members and resources; works while players are elsewhere (subject to pause-when-empty).
+
+### F10 - Defeat, not death; Virtual Game Master; first story loop
+- Defeat: a downed player's outcome depends on who defeated them, e.g. captured and imprisoned by a raider or insane faction at a real location; dragged off or left for dead by zombies with an infection debuff; waking injured after wildlife or accidents. The defeat is a fact; the victor gets a buff and promotion to a named persistent NPC and takes the player's **actual items** (exactly-once transfer); the player takes a recoverable debuff. NPCs can really die (and may also be captured).
+- Virtual Game Master: deterministic and rule-based. Watches the fact graph for story-worthy patterns (defeat, shortage, captured ally, debt), scores them (connection to players, proximity, recency, pacing), connects threads with story-time invention, and commits what it creates as shared facts with single-claim rewards. An LLM may later vary phrasing only.
+- First loop: **defeat → capture → escape, teammate rescue, or revenge bounty** for finding and defeating the victor.
+- Acceptance: two-player run where B rescues A or claims the revenge reward exactly once; items, buffs and debuffs, facts and rumors persist through reconnect/restart; abuse caps (no capture loops).
+- Open decisions: can zombie infection ever turn a player? Does a captive's clock run while that player is offline but others play (absent-and-protected suggests it pauses)? Optional permadeath server setting?
+
+### F11 - Items and building as data (start of the mod surface)
+- Outcome: data definitions for item types and building pieces with namespaced IDs, generalizing the Q02 one-offs; exactly-once transfers, costs and receipts carried over.
+- **Mindful, not built in v1.0:** items will later have rarity and their own stats. Keep room for it now: distinguish stackable item *types* from unique item *instances* (stable instance ID plus an optional property bag), and don't assume a count-only inventory everywhere. No rarity, affixes or loot tables in v1.0.
+- Acceptance: a sample data-only mod adds an item and a wall variant; missing mods preserve saves and fail clearly.
+
+### F12 - v1.0 acceptance run
+- The DIRECTOR.md weekly review as the test: two players in a generated region with millions of persistent agents; A acts while B is elsewhere; the event becomes a fact and a rumor travels; a faction responds with real resources; the game master offers an opportunity; B invalidates a prerequisite; both disconnect, the server restarts, everything is consistent; the defeat loop works. Runs on Windows and Linux; every step can be inspected in the tooling.
+
+### F13 - Tooling (continuous)
+- World inspector (who knows what, faction stats, agent under cursor), record/replay of inputs for bug reproduction, performance telemetry. Grows with each step.
+
+### F14 - Platform and CI (continuous)
+- Windows builds tested; CI runs domain checks and the CPU reference of the population simulation (no GPU needed thanks to bit-identical results) on every push. Discrete GPUs only (NVIDIA, AMD, Intel Arc); no integrated-GPU target. Population budget scales with host hardware; a CPU-only host runs a smaller world.
+
+### Not in v1.0
+Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS.
+
 ## Q00 - Bound the experiment
 
 - Owner: director and integration owner. Dependency: none. Timebox: 1-2 days.
