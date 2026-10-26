@@ -44,6 +44,7 @@ python3 scripts/verify_build.py              # Q02b wall race/replay/recovery/mi
 python3 scripts/verify_build_screen.py       # graphical clients on a private Xvfb (self re-execs under xvfb-run)
 python3 scripts/verify_items.py              # Q02a item ENet/recovery/migration
 python3 scripts/verify_multiplayer.py        # Q01 network regressions
+python3 scripts/verify_living.py / verify_defeat.py / verify_content.py   # nightly living world, defeat, mods
 python3 scripts/verify_save_failures.py      # persistence fault cases
 ```
 
@@ -75,6 +76,11 @@ and disable compiler servers; keep those flags when invoking `dotnet` directly.
   first snapshot are drawn incrementally). Server never creates view nodes. Client profiles persist the last
   pickup/build request before sending so T can replay it. Test-only hooks: `--intent-file` (movement, pickup/build
   requests, `keys`, `capture`), `--status=PATH`, `--shutdown-file=PATH`.
+- Nightly v1.0 domain files: `CityGen.cs` (seeded integer world, chunks), `Population.cs` (coarse agents, rumor
+  spread), `Living.cs` (tiers, NPC behaviour, combat), `Defeat.cs` (defeat outcomes, item ledger, Virtual Game Master),
+  `Rumors.cs` (facts → rumors, asking, faction standing), `PopulationStore.cs` (snapshots), `Content.cs` (data items, mods).
+  The authority touches population arrays only between coarse ticks (background task). All item movements between
+  holders go through `Transfer` (ledgered); never edit inventories of named NPCs or caches directly.
 - `experiments/presentation/` — the preserved, disposable Q00 2D/sprite3D/poly3D comparison (`run_presentation.sh`); not the game.
 - `src/QuestSim.Game/evidence/`, `experiments/presentation/evidence/` — small versioned results/screenshots; raw evidence stays in `.artifacts/`.
 
@@ -86,7 +92,7 @@ Core invariants (see ENGINE_RULES.md "World invariants"):
   hand-edit stock or prune receipts. A new item, cost or crate needs matching validation rules.
 - Fixed content positions matter to tests: Q01 movement suites walk Alice +X along z=0 and Bob ±Z along x=−4.
 - World time pauses with zero joined characters. Disconnected characters vanish but keep identity/inventory.
-- Versioning: save schema 3, wire `ProtocolVersion` 3, content ID `questsim:q02b-room-v1`. Unknown/incomplete
+- Versioning: save schema 4, wire `ProtocolVersion` 4, content ID `questsim:city-v1`. Unknown/incomplete
   saves fail closed. Changing IDs, saves or messages requires stating compatibility and backing up saves before
-  migration (v1/v2 saves get a byte-exact `.v1-`/`.v2-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3). Protocol changes require rebuilding server and all clients.
+  migration (v1–v3 saves get a byte-exact `.v<n>-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3→v4). Protocol changes require rebuilding server and all clients.
 - Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: local Linux, loopback, two clients. Exports, LAN/WAN, 2–8 load and power-loss durability are unverified.

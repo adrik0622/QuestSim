@@ -97,6 +97,7 @@ Each milestone is small, tested end to end, and recorded with evidence.
 | **Q02a** One item | Two players race for one bandage; exactly one wins, and retries never duplicate it | [results](questsim_planning_kit/Q02_RESULTS.md) |
 | **Q02b** One wall | Two players race to build in the last free cell; the cost is paid exactly once | [results](questsim_planning_kit/Q02B_RESULTS.md) |
 | **E1** Population and rumors | 10 million simulated agents on the GPU, bit-identical to the CPU reference | [results](questsim_planning_kit/E1_RESULTS.md) |
+| **Nightly** v1.0 foundation *(branch `nightly`)* | A generated 40 × 40 km city; a million persistent agents with detail near players; zombies, cultists and factions; melee and pistol; defeat instead of death; a game master that turns facts into opportunities; rumors by word of mouth; data-defined items and mods; CI on Linux and Windows | [log](questsim_planning_kit/NIGHTLY_2026-10-26.md) |
 
 A world of one million agents from the E1 experiment. Green is humans (with faint travel streaks
 between settlements), red is migrating zombie hordes, and cyan is people carrying a rumor outward
@@ -104,11 +105,16 @@ from where an event happened:
 
 ![One million simulated agents](experiments/population/evidence/world-1e6.png)
 
+And inside the game, on the `nightly` branch: the plaza outside the starter building, with Survivors' Union
+members in the street and the downtown towers behind them.
+
+![Populated plaza in the generated city](src/QuestSim.Game/evidence/nightly/city-npcs.png)
+
 ---
 
 ## Architecture
 
-> Solid parts exist today. Parts marked *(planned)* are the direction we're testing toward.
+> Everything below runs on the `nightly` branch except parts marked *(planned)*.
 
 ### The big picture
 
@@ -121,7 +127,7 @@ flowchart LR
     subgraph Server["Dedicated server"]
         AUTH["World authority (CPU)<br/>validates every request,<br/>owns facts and ledgers"]
         POP["Population simulation (GPU, Vulkan)<br/>millions of humans and zombies"]
-        STORY["Story director (planned)<br/>opportunities from real facts"]
+        STORY["Virtual Game Master<br/>opportunities from real facts"]
     end
     SAVE[("Save files<br/>atomic, versioned")]
 
@@ -186,14 +192,14 @@ flowchart TD
     FACT --> RUMOR["Rumor slot<br/>credibility fades with age"]
     RUMOR --> PEOPLE["People who meet pass it on<br/>(trust depends on faction)"]
     PEOPLE --> FORGET["People forget;<br/>the rumor eventually retires"]
-    FACT --> STORY["Story director (planned)<br/>offers an opportunity"]
-    STORY --> INVENT["Story-time invention (planned)<br/>the cart, the rum, the wolves"]
+    FACT --> STORY["Virtual Game Master<br/>offers an opportunity"]
+    STORY --> INVENT["Story-time invention<br/>a stash, a bounty, a named victor"]
     INVENT --> FACT
 ```
 
 Rumors change what people *believe*. They never change what *happened*.
 
-### How much each NPC can carry *(planned layout)*
+### How much each NPC can carry
 
 Most of an NPC is never stored at all. It's regenerated from the world seed and the NPC's ID, and it
 comes out the same every time and for every player. Only what actually happens to them is saved.
@@ -220,7 +226,7 @@ flowchart LR
 At 10 million NPCs that's roughly 0.5 GB of GPU memory and a few GB of RAM, with rich detail only for
 the people that players and events have actually touched.
 
-### Detail near players, coarse far away *(planned, experiment E2)*
+### Detail near players, coarse far away
 
 ```mermaid
 flowchart LR
@@ -228,7 +234,27 @@ flowchart LR
     NEAR -- "player leaves" --> FAR
 ```
 
-The same individual moves between tiers without being lost, duplicated or reset.
+The same individual moves between tiers without being lost, duplicated or reset. Agents within 120 m of a
+player are simulated at 20 Hz (zombies and hostile factions hunt, others go about their business) and
+return to the coarse 1 Hz population tick when players move more than 180 m away.
+
+### Defeat instead of death
+
+```mermaid
+flowchart TD
+    D["Player downed"] --> W{"Who won?"}
+    W -- "zombies" --> I["Infected + injured,<br/>wake in the starter room"]
+    I --> CURE["Game master invents an antiviral stash<br/>(cure opportunity)"]
+    I -- "untreated" --> T["Turned: gear left in remains,<br/>new character"]
+    W -- "Hollow Choir or a hostile faction" --> C["Captured where they fell"]
+    C --> V["Victor takes the actual items,<br/>gains a title and becomes a named NPC"]
+    C --> R["Rescue opportunity<br/>(a teammate frees you)"]
+    V --> B["Revenge bounty<br/>(kill the victor, recover the gear)"]
+    W -- "permadeath server" --> P["Dead: gear stays where they fell"]
+```
+
+Clocks for infection, captivity and injury only run while that player is online. Every item that changes
+hands is recorded in a ledger, so nothing is ever duplicated or lost along the way.
 
 ### Roadmap
 
@@ -277,9 +303,13 @@ bash scripts/run_client.sh bob
 | Up / Down | Tilt the camera |
 | C | Switch between first and third person |
 | R | Reset the camera |
-| F | Take an item from the nearest stocked crate |
+| F | Use: free a captive teammate, loot a cache, or take from the nearest crate |
 | B | Build a wall panel on the orange cell |
-| T | Retry your last saved action |
+| T | Retry your last saved pickup or build |
+| V | Melee attack |
+| G | Fire the pistol |
+| H | Ask the nearest person what they've heard |
+| U | Use your best healing item |
 
 Close a client to leave, and relaunch the same profile name to return as the same character. World
 time pauses when nobody is connected. Play data is kept in `.artifacts/play/`.
@@ -297,6 +327,11 @@ python3 scripts/verify_build.py                # wall-building race, retries, cr
 python3 scripts/verify_build_screen.py         # real key presses + screenshots on a virtual display
 python3 scripts/verify_items.py                # item pickup race and recovery
 python3 scripts/verify_multiplayer.py          # two-client networking regressions
+python3 scripts/verify_living.py               # population tiers, combat, asking NPCs, snapshots, 1M-agent budget
+python3 scripts/verify_defeat.py               # capture, rescue, infection turning a player
+python3 scripts/verify_content.py              # data-defined items, example mod, missing-mod refusal
+python3 scripts/verify_city_screen.py          # populated city rendered on a virtual display
+python3 scripts/inspect_world.py WORLD.json    # read-only summary of any save
 
 bash scripts/run_population.sh check           # population experiment: CPU vs GPU bit-identical
 bash scripts/run_population.sh bench --agents 1e5,1e6,1e7
@@ -313,6 +348,7 @@ The [runbook](questsim_planning_kit/RUNBOOK.md) lists every command, with expect
 | --- | --- |
 | `src/QuestSim.Domain/` | Game rules as plain C# with no engine dependency: authority, saves, validation |
 | `src/QuestSim.Game/` | The Godot project, used as both the server and the client |
+| `content/`, `mods/` | Data-defined items (core) and an example data-only mod |
 | `checks/` | Offline checks of the game rules |
 | `experiments/population/` | The E1 population and rumor experiment (Vulkan + C# reference) |
 | `experiments/presentation/` | The original 2D / sprite / low-poly comparison |
@@ -327,7 +363,9 @@ The [runbook](questsim_planning_kit/RUNBOOK.md) lists every command, with expect
   such as CrossOver, which hasn't been tested.
 - **Verified so far:** local Linux, loopback networking and two clients. Exported builds, LAN/WAN and
   2-8 player loads haven't been tested yet.
-- **Simulation:** about 10 million agents at one population tick per second on an RTX 3080 Ti. Going
+- **Game world (nightly):** one million agents by default (`--population=N`), which the server's CPU
+  path handles at 20 ticks per second; population snapshots save in the background every 60 seconds.
+- **Simulation experiment:** about 10 million agents at one population tick per second on an RTX 3080 Ti. Going
   beyond that needs better memory locality (the next experiment, E1b).
 - **Content:** one room, one crate of bandages, one crate of wall panels and one build cell. The
   living-world systems are being built and measured separately before they join the game.

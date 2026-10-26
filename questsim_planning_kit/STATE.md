@@ -1,42 +1,39 @@
 # QuestSim implementation state
 
-2026-10-25 (session 2): Q02b one modular wall placement complete; stop at this
-bounded task. Q02a pickup and Q01 low-poly 3D/first-third-person baseline retained.
+2026-10-26 (nightly run): branch `nightly` carries the v1.0 foundation work (BACKLOG F1–F14);
+`main` is unchanged at 956edc6. Full log, results and the director's open decisions:
+NIGHTLY_2026-10-26.md. Everything is experimental (DIRECTOR.md).
 
-Origin git@github.com:adrik0622/QuestSim.git; main tracks origin/main. Director
-authorized periodic verified pushes. Q02b checkpoints: acc2140 domain, 92888e8
-runtime (pushed, ls-remote verified); final HEAD adds screen test/evidence/docs.
-All work local to QuestSim; no play saves touched.
+Implemented on `nightly` (each step checked, committed and pushed):
+- F3 world: seeded 40 × 40 km city (22k buildings, 8 towns, roads), chunk streaming in the
+  client, building collision on the server; the starter room is an enclosed building.
+- F2/F5 population in the server: 1,000,000 agents by default, coarse 1 Hz tick on a
+  background task, 20 Hz detail within 120 m of players, per-player snapshots.
+- F7 living actors and combat: zombies and hostile factions hunt; rudimentary stats; V melee,
+  G hitscan pistol (walls block, ammo counted).
+- F10 defeat instead of death + deterministic Virtual Game Master: infection (story-time cure
+  stash), turning, capture by named victors who take the actual gear, rescue and revenge
+  opportunities (single claim), permadeath setting, online-only clocks, ledgered transfers.
+- F8/F9 facts become rumors by word of mouth; H asks an NPC what it has heard; faction
+  standing turns factions hostile.
+- F4 population snapshots saved in the background and committed by hash.
+- F11 data-defined items and data-only mods (manifest, namespaces, dependencies; worlds refuse
+  to start without a recorded mod); U uses consumables.
+- F12 acceptance chain in domain checks; F13 `scripts/inspect_world.py`; F14 CI on Linux and
+  Windows (domain + population CPU checks).
 
-Implemented: second crate `questsim:panel-crate` (two `questsim:wall-panel`) at
-(-3, 1.5); one build cell `questsim:build-cell-1` at (-4, 1.5) with a floor marker.
-F takes from the nearest stocked crate in reach; B places a 1m panel wall; T retries
-the last saved attempt (pickup or build). Server validates actor, site, 2m reach,
-free cell, held panel and no active body in the cell; block, spent panel and
-actor-scoped receipt are saved together before reply. Last-cell loser gets
-`occupied` and keeps its panel. Clients draw walls added after the first snapshot.
-Save/protocol v3, content `questsim:q02b-room-v1`; v2 saves get a byte-exact
-`.v2-<guid>.bak`, v1 still migrates (one `.v1-` backup). Old profiles readable.
+Save/protocol v4, content `questsim:city-v1`; v1–v3 saves migrate with byte-exact backups.
 
-Verified this session: zero build warnings/errors; 54 domain checks (16 new);
-verify_build.py 11 ENet checks (race, replay, conflict, reconnect, restart, lost
-reply, failed save, real v2 migration); verify_build_screen.py 4 checks with real
-F/B/T/C key events via Input.ParseInputEvent in graphical clients on Xvfb; PNGs
-inspected. Regressions: verify_items 12, verify_multiplayer 12, save faults 4.
-verify_terminal_shutdown's 3 behavior checks pass on Xvfb; its log assertion fails
-only on the llvmpipe V-Sync warning (Xvfb-only). verify_item_desktop.py and
-verify_shared_desktop.py drive the real desktop and were not run; item_desktop's
-second-F expectation was updated (now a panel) but is unverified.
+Verified: 110 domain checks; verify_build 11, verify_items 12, verify_multiplayer 12,
+verify_save_failures 4, verify_defeat 3, verify_living 6 (1M agents hold 20 ticks/s with
+background snapshots), verify_content 2, Xvfb screens (verify_build_screen 5, city screen);
+E1 population checks 12; GitHub Actions green on ubuntu and windows.
 
-Limits unchanged: Linux development/loopback only, no exports/WAN/2–8 load,
-power-loss/directory-fsync guarantee, authentication, camera collision, mouse-look.
-One fixed cell and wall; no demolition, doors, refill, navigation or generic
-construction/inventory. Receipts unpruned. Screen tests use software GL.
+Not done / limits: F1 locality (deferred: 10⁶ fits the CPU), F6 binary snapshots (JSON with
+interest management only), Godot exports and Windows *game* runs (only domain checks run on
+Windows), LAN/WAN and 2–8 player load, camera collision, item instances/rarity, code mods,
+building colours render washed-out (cosmetic). verify_item_desktop/verify_shared_desktop/
+verify_terminal_shutdown (real desktop) not rerun.
 
-Results: Q02B_RESULTS.md. Handoff: ../HANDOFF_2026-10-25.md.
-2026-10-26: E1 population/rumor experiment complete (E1_RESULTS.md). Vulkan via
-Silk.NET (Godot headless has no RenderingDevice). 12 checks pass incl. CPU vs GPU
-bit-identical every tick. ~10⁷ agents at 1 tick/s on RTX 3080 Ti with zero authority
-wait; 10⁸ is 15–30 s/tick because neighbour reads lack locality.
-Next action: v1.0 foundation plan F1–F14 in BACKLOG.md (2026-10-26). Proposed next
-CURRENT_TASK: F1/E1b population locality, awaiting director go-ahead.
+Next action: director reviews NIGHTLY_2026-10-26.md decisions, plays the nightly build, and
+decides whether to merge `nightly` into `main`.

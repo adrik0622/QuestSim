@@ -100,7 +100,7 @@ public partial class RoomView : Node3D
             float shade = .45f + (CityGen.Mix((uint)(b.X * 73856093 ^ b.Z * 19349663)) % 100) / 400f;
             multi.SetInstanceColor(i, b.Height > 18 ? new Color(shade * .8f, shade * .85f, shade) : new Color(shade, shade * .9f, shade * .75f));
         }
-        node.AddChild(new MultiMeshInstance3D { Multimesh = multi, MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, Roughness = .9f } });
+        node.AddChild(new MultiMeshInstance3D { Multimesh = multi, MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = .9f } });
         return node;
     }
 

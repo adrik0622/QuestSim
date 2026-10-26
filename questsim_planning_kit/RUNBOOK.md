@@ -225,6 +225,27 @@ All use fresh disposable fixtures; actual play saves are not edited by tests.
 The lost-reply test sends SIGSTOP/CONT/KILL only to its tracked test children.
 It never suspends user processes. Q02_RESULTS.md contains evidence and limitations.
 
+## Nightly v1.0 foundation (branch `nightly`)
+
+Same build and launch commands. New server options: `--population=N` (new worlds; default
+1,000,000; tests use 0 or 100k), `--population-save-seconds=S` (default 60), `--content=DIR`
+(default `content/core`), `--mods=DIR` (default `mods/`). New keys: F use, V melee, G shoot,
+H ask, U heal. Play data stays in `.artifacts/play/`; population snapshots sit beside the
+world as `world.json.population-<tick>.bin`.
+
+```bash
+bash scripts/check.sh                          # 110 domain checks
+python3 scripts/verify_living.py               # tiers, combat, asking, snapshots, 1M budget (cap memory)
+python3 scripts/verify_defeat.py               # capture, rescue, infection turning
+python3 scripts/verify_content.py              # mods and consumables
+python3 scripts/verify_city_screen.py          # Xvfb capture of the populated plaza
+python3 scripts/inspect_world.py .artifacts/play/world.json   # read-only save summary
+```
+
+Older suites (build, items, multiplayer, save failures, build screen) run their servers with
+`--population=0` so exact actor counts keep their meaning. Your existing v3 play save migrates
+to v4 on first start (byte-exact `.v3-<guid>.bak`); it gets no population unless recreated.
+
 ## E1 — population and rumor experiment
 
 Headless, disposable, outside the game. Needs a Vulkan driver and `glslc` (Vulkan SDK /
