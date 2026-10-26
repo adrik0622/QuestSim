@@ -32,6 +32,7 @@ One fixed crate/item, no use/drop/trade/refill or generic inventory/mod framewor
 Yellow construction module stays static. Receipt retention is unbounded for this
 probe; no pruning policy claimed. Future world/gameplay rules remain in DIRECTOR.md.
 
+Dated resume handoff: ../HANDOFF_2026-10-25.md.
 Results, commands and limitations: Q02_RESULTS.md / RUNBOOK.md.
 One next action: Q02b, one authoritative modular wall placement with last-cell
 race, exactly-once resource cost and persistent retry results. Do not start a full

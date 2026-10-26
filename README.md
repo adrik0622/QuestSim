@@ -1,5 +1,7 @@
 # QuestSim
 
+[Resume handoff — 2026-10-25](HANDOFF_2026-10-25.md)
+
 Living multiplayer-world experiment, beginning with cooperative zombie survival.
 Current increment: two low-poly 3D clients and one server-authoritative item pickup.
 
