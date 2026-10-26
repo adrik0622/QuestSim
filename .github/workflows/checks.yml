@@ -34,3 +34,21 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y glslc
       - name: Population checks (CPU reference only)
         run: bash scripts/run_population.sh check --backend cpu
+
+  game-compile:
+    # Compiles the Godot C# game (server + client code) from nuget.org packages; does not run Godot.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Use nuget.org instead of the local Godot package folder
+        shell: bash
+        run: cp experiments/population/NuGet.Config src/QuestSim.Game/NuGet.Config
+      - name: Build game
+        run: dotnet build src/QuestSim.Game -warnaserror
