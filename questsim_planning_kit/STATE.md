@@ -34,8 +34,7 @@ E1 population checks 12; GitHub Actions green on ubuntu and windows.
 
 Not done / limits: F1 locality (deferred: 10⁶ fits the CPU), F6 binary snapshots (JSON with
 interest management only), Godot exports and Windows *game* runs (only domain checks run on
-Windows), LAN/WAN and 2–8 player load, camera collision, item instances/rarity, code mods,
-building colours render washed-out (cosmetic). verify_item_desktop/verify_shared_desktop/
+Windows), LAN/WAN and 2–8 player load, camera collision, item instances/rarity, code mods. verify_item_desktop/verify_shared_desktop/
 verify_terminal_shutdown (real desktop) not rerun.
 
 Next action: director reviews NIGHTLY_2026-10-26.md decisions, plays the nightly build, and

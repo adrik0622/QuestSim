@@ -22,6 +22,8 @@ public static class AuthorityChecks
         world.Step();
         check(Math.Abs(Math.Sqrt(Math.Pow(a.X - x, 2) + Math.Pow(a.Z - z, 2)) - WorldAuthority.Speed / WorldAuthority.TickRate) < 1e-9,
             "diagonal movement uses server speed and fixed timestep");
+        check(world.SetIntent(2, 2, 2, 0, 0) && world.SetIntent(2, 3, 1, 1, 0), "sprint intents (length > 1.5) are accepted alongside walking ones");
+        world.SetIntent(2, 4, 1, 1, 0);
         for (int i = 0; i < 6; i++) world.Step();
         x = a.X; z = a.Z;
         world.Step();

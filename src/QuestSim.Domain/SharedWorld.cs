@@ -231,10 +231,11 @@ public sealed partial class WorldAuthority
     public bool SetIntent(int peer, long sequence, double x, double z, double heading)
     {
         if (!active.ContainsKey(peer) || sequence <= 0 || !double.IsFinite(x) || !double.IsFinite(z) ||
-            Math.Abs(x) > 1 || Math.Abs(z) > 1 || !double.IsFinite(heading) ||
+            Math.Abs(x) > 2 || Math.Abs(z) > 2 || !double.IsFinite(heading) ||
             (intents.TryGetValue(peer, out var previous) && sequence <= previous.Sequence)) return false;
-        double length = Math.Sqrt(x * x + z * z);
-        if (length > 1) { x /= length; z /= length; }
+        // Unit intents walk; intents longer than 1.5 are a sprint at double speed.
+        double length = Math.Sqrt(x * x + z * z), cap = length > 1.5 ? 2 : 1;
+        if (length > cap) { x = x / length * cap; z = z / length * cap; }
         intents[peer] = (sequence, x, z, Math.IEEERemainder(heading, Math.Tau), State.Tick + 5);
         return true;
     }

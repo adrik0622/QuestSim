@@ -106,6 +106,9 @@ public partial class Session : Node
                 authority.LoadPopulation(savePath);
                 populationSaveSeconds = double.Parse(Option("population-save-seconds", "60"), System.Globalization.CultureInfo.InvariantCulture);
                 GD.Print($"POPULATION agents={save.Population} load={authority.PopulationLoad}");
+                if (authority.Pop is { } pop)   // playtest aid: where the hostile Hollow Choir lives
+                    GD.Print("CHOIR_SETTLEMENTS " + string.Join(" ", pop.Settlements.Where(x => pop.SettlementFaction[x.Index] == Population.Hostile)
+                        .OrderBy(x => (long)x.X * x.X + (long)x.Z * x.Z).Take(3).Select(x => $"({x.X},{x.Z})")));
                 network.SetBindIP(Option("bind", "127.0.0.1"));
                 error = network.CreateServer(port, 8);
                 Multiplayer.PeerDisconnected += OnPeerLeft;
@@ -575,6 +578,7 @@ public partial class Session : Node
                     Vector2 input = new((Input.IsPhysicalKeyPressed(Key.D) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.A) ? 1 : 0),
                                         (Input.IsPhysicalKeyPressed(Key.S) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) ? 1 : 0));
                     if (input.LengthSquared() > 1) input = input.Normalized();
+                    if (Input.IsPhysicalKeyPressed(Key.Shift)) input *= 2;   // sprint
                     double yaw = view?.Yaw ?? -Math.PI / 2;
                     desiredX = -Math.Sin(yaw) * -input.Y + Math.Cos(yaw) * input.X;
                     desiredZ = -Math.Cos(yaw) * -input.Y - Math.Sin(yaw) * input.X;
