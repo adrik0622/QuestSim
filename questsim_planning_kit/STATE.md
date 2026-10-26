@@ -106,6 +106,14 @@ their numbers (67,328 -> 67,331 with 15,252 born; zombies 22,627 -> 22,609), 13 
 and 14 overruns, all rebuilt; a food blight starves the Traders from day 17 (94 settlements in
 unrest), they trade and raid and recover by day ~35. 156 domain checks.
 
+2026-10-26 (pills near players): at the 1M-agent plaza 524 people were within 120 m against a
+400-NPC budget, so 113 were placeholders (8 within 20 m). Now the nearest people win the budget
+(far full NPCs beyond 60 m return to the crowd): none within 40 m at 400. Budget is
+--detail-budget; measured with 8 players and 1M agents: 400 -> 97 KiB/s per client, 600 -> 94
+KiB/s after moving the settlement table out of the world JSON (it had cost ~24 KB/s per client),
+both 20 ticks/s with no lag on Linux and on whitetop (Ryzen 5 2600). At 600 everyone near the
+plaza is a full NPC. Default stays 400 until the director picks.
+
 Next action: director playtest of F19/F19b/F20 (M map, rumors such as "A great horde is
 moving on ...", faction news), or F21 (caravans and raid parties as travelling groups players
 can meet). Tuning knobs are constants at the top of Economy.cs and Politics.cs.
