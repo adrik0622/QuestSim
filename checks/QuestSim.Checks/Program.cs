@@ -38,3 +38,4 @@ Console.WriteLine("Offline domain fixture only; no engine, collision, networking
 AuthorityChecks.Run(Check);
 PickupChecks.Run(Check);
 BuildChecks.Run(Check);
+CityChecks.Run(Check);
