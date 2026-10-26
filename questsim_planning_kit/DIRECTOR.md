@@ -99,6 +99,12 @@ instead of death (capture/abduction, buffs/debuffs, revenge and rescue); and a d
 Virtual Game Master that ties facts into opportunities. Item rarity and per-item stats are
 kept in mind in the data model but not built for v1.0.
 
+**v1.0 details (2026-10-26, subject to change):** super basic gunplay and melee, to be
+improved later. Zombie infection can turn a player. A captive's clock pauses while that
+player is offline. Permadeath is an optional server setting. The v1.0 world is one city plus
+outskirt towns with roughly one million agents, about a tenth of what E1 showed one GPU can
+tick.
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs
