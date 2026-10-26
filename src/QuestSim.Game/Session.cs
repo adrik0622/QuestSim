@@ -565,7 +565,7 @@ public partial class Session : Node
             string worldJson = JsonSerializer.Serialize(view with { Actors = [], Sequence = 0, Tick = 0 });
             // The settlement table (~20 KB) changes once per game hour; it rode in the world JSON, which faction member counts
             // change every second, costing every client ~24 KB/s.
-            long economyHour = authority.State.EconomyTicks / Economy.TicksPerHour;
+            long economyHour = authority.State.EconomyTicks / Economy.TicksPerHour * 4096 + authority.State.Settlements.Count;   // also when first created
             if (authority.Pop is not null && sentEconomyHour.GetValueOrDefault(peer, -1) != economyHour)
             {
                 RpcId(peer, nameof(ReceiveSettlements), JsonSerializer.Serialize(authority.SettlementInfos().ToArray()));
