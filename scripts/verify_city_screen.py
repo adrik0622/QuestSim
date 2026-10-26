@@ -40,6 +40,12 @@ try:
     f.command('alice', keys=['C']); time.sleep(.6)
     capture('city-npcs-first-person')
     print(f'PASS a graphical client in the plaza renders the city with {len(npcs)} nearby NPCs', flush=True)
+    settlements = f.status('alice')['snapshot']['Settlements']
+    assert settlements and len(settlements) > 100 and all(len(s['Days10']) == 4 for s in settlements)
+    f.command('alice', keys=['M']); time.sleep(.6)
+    capture('city-map')
+    f.command('alice', keys=['M']); time.sleep(.3)
+    print(f'PASS M opens the debug map of {len(settlements)} settlements (stock, order, shortages, factions)', flush=True)
     f.close('alice'); wait(lambda: f.status('server')['active'] == 0, 'absent'); f.close('server', server=True)
     for label in f.processes:
         text = (f.directory / (label + '.log')).read_text().replace(XVFB_WARNING, '')

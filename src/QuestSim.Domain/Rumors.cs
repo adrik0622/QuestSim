@@ -10,7 +10,7 @@ public sealed partial class WorldAuthority
     public const long RumorLifetime = 3600;          // population ticks (2 game days at 48:1)
     public const double WitnessRadius = 150, AskReach = 3;
     public const int HostileBelow = -50;
-    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack"];
+    static readonly HashSet<string> RumorKinds = ["defeat", "capture", "rescued", "turned", "died", "claimed", "attack", "shortage"];
     public const int AttackFactThreshold = 10;
 
     // Background attrition becomes news when a settlement loses enough people in one coarse tick.
@@ -141,6 +141,8 @@ public sealed partial class WorldAuthority
         "turned" => $"{NameOf(f.Subject)} turned; the infection took them {Place(f.X, f.Z)}.",
         "died" => $"{NameOf(f.Subject)} died {Place(f.X, f.Z)}.",
         "attack" => $"The dead overran the settlement {Place(f.X, f.Z)}; {f.Object.Split(':')[2]} people were lost.",
+        "shortage" => f.Object == "food" ? $"People are going hungry {Place(f.X, f.Z)}; the food ran out." : $"They've run out of {f.Object} {Place(f.X, f.Z)}.",
+        "recovered" => $"Supplies of {f.Object} reached the settlement {Place(f.X, f.Z)} again.",
         "claimed" => $"{NameOf(f.Subject)} brought down {NameOf(State.Opportunities.First(o => $"opportunity:{o.Id}" == f.Object).Target)}.",
         _ => $"Something happened {Place(f.X, f.Z)}."
     };

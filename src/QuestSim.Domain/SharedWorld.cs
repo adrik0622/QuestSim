@@ -45,7 +45,7 @@ public sealed record SupplyState(string Id, string ItemId, double X, double Z, i
 public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
 public sealed record BuildReceipt(string RequestId, string ActorId, string SiteId, bool Success, string Reason, int Cost);
 public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies, ulong WorldSeed,
-    Opportunity[]? Opportunities = null, LootCache[]? Caches = null, FactionInfo[]? Factions = null);
+    Opportunity[]? Opportunities = null, LootCache[]? Caches = null, FactionInfo[]? Factions = null, SettlementInfo[]? Settlements = null);
 
 public sealed class CharacterRecord
 {
@@ -78,7 +78,7 @@ public sealed class WorldSave
         new("questsim:panel-crate", Panel, -3, 1.5, 2)
     };
     public static readonly BlockRecord BuildSite = new("questsim:build-cell-1", -4, 1.5, 1, .25, 2);
-    [JsonRequired] public int Version { get; set; } = 4;
+    [JsonRequired] public int Version { get; set; } = 5;
     [JsonRequired] public string ContentId { get; set; } = Content;
     [JsonRequired] public long Tick { get; set; }
     [JsonRequired] public double HalfExtent { get; set; } = CityGen.Half;
@@ -97,6 +97,8 @@ public sealed class WorldSave
     public List<NamedNpc> Named { get; set; } = new();
     public List<LootCache> Caches { get; set; } = new();
     public Dictionary<int, int> Standing { get; set; } = new();   // faction -> attitude toward players, -100..100
+    public List<SettlementState> Settlements { get; set; } = new();   // F19 economy (since v5); empty until the population first steps
+    public long EconomyTicks { get; set; }                          // coarse ticks the economy has seen
     [JsonRequired] public List<SupplyState> Supplies { get; set; } = InitialSupplies.ToList();
     [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<BuildReceipt> BuildReceipts { get; set; } = new();
@@ -118,7 +120,7 @@ public sealed class WorldSave
 
 public sealed partial class WorldAuthority
 {
-    public const int ProtocolVersion = 5;   // 5: crowd packets carry velocities; NPC bodies (health 0) in snapshots
+    public const int ProtocolVersion = 6;   // 5: crowd velocities, NPC bodies; 6: settlement economy in world snapshots
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;
@@ -296,7 +298,7 @@ public sealed partial class WorldAuthority
             .Concat(NpcsVisibleTo(viewer, peer is null)).ToArray();
         return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed,
             State.Opportunities.Where(o => o.Status == "open").ToArray(), State.Caches.Where(k => k.Inventory.Count > 0).ToArray(),
-            Pop is null ? null : Factions().ToArray());
+            Pop is null ? null : Factions().ToArray(), Pop is null ? null : SettlementInfos().ToArray());
     }
 }
 
@@ -339,10 +341,16 @@ public static class WorldStorage
             root["Version"] = 4;
             root["ContentId"] = WorldSave.Content;
         }
+        // v5 adds the settlement economy, generated from the population on its first step.
+        if (root["Version"]?.GetValue<int>() == 4)
+        {
+            if (root["ContentId"]?.GetValue<string>() != WorldSave.Content) throw new InvalidDataException("Unsupported v4 content");
+            root["Version"] = 5;
+        }
         var world = JsonSerializer.Deserialize<WorldSave>(root.ToJsonString(), JsonOptions) ?? throw new InvalidDataException("Empty world save");
         Validate(world);
         // Validate first; backup is immutable and created before any v3 save can replace the original.
-        if (from is 1 or 2 or 3) File.Copy(path, path + $".v{from}-" + Guid.NewGuid().ToString("N") + ".bak", overwrite: false);
+        if (from is 1 or 2 or 3 or 4) File.Copy(path, path + $".v{from}-" + Guid.NewGuid().ToString("N") + ".bak", overwrite: false);
         return world;
     }
     public static void Save(string path, WorldSave world)
@@ -373,7 +381,7 @@ public static class WorldStorage
     }
     public static void Validate(WorldSave w)
     {
-        if (w.Version != 4 || w.ContentId != WorldSave.Content || w.Generator != CityGen.Version) throw new InvalidDataException("Unsupported world save version/content/generator");
+        if (w.Version != 5 || w.ContentId != WorldSave.Content || w.Generator != CityGen.Version) throw new InvalidDataException("Unsupported world save version/content/generator");
         if (w.Tick < 0 || !double.IsFinite(w.HalfExtent) || w.HalfExtent != CityGen.Half || w.Characters is null || w.Blocks is null)
             throw new InvalidDataException("Invalid world data");
         if (w.Characters.Any(c => c is null || string.IsNullOrEmpty(c.Id) || !c.Id.StartsWith("actor:") || !Guid.TryParseExact(c.Id[6..], "N", out _) ||
@@ -383,6 +391,9 @@ public static class WorldStorage
             w.Characters.Select(c => c.Id).Distinct().Count() != w.Characters.Count ||
             w.Characters.Select(c => c.ProfileId).Distinct().Count() != w.Characters.Count)
             throw new InvalidDataException("Invalid/duplicate character data");
+        if (w.Settlements is null || w.EconomyTicks < 0 || w.Settlements.Select((s, i) => s is not null && s.Index == i && s.Profile is >= 0 and < 4 &&
+                s.Stock is { Length: Economy.Goods } && s.Stock.All(v => v >= 0) && s.Order is >= 0 and <= 100 && s.HoursHungry >= 0).Any(ok => !ok))
+            throw new InvalidDataException("Invalid settlement economy");
         if (w.Blocks.Any(b => b is null || string.IsNullOrWhiteSpace(b.Id) || !double.IsFinite(b.X) || !double.IsFinite(b.Z) ||
             !double.IsFinite(b.Width) || !double.IsFinite(b.Depth) || !double.IsFinite(b.Height) ||
             b.Width <= 0 || b.Depth <= 0 || b.Height <= 0 || b.Width > 12 || b.Depth > 12 || b.Height > 6) ||

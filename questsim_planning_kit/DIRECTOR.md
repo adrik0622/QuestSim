@@ -119,6 +119,22 @@ tick.
 - **NPC pop-in:** avoid promoting NPCs right next to players; drawing simple placeholders for
   nearby background people is a stretch goal.
 
+**Depth: economy, factions and leaders (2026-10-26, subject to change):** depth comes from
+systems pushing on each other in ways players can see. Simulate at the coarsest level a player
+could notice (229 settlements and 5 factions, not per-person economies); every meaningful change
+becomes a fact (and so rumors and opportunities); abstract decisions have physical consequences
+(caravans and raid parties are travelling people who can be met, escorted or ambushed).
+- **Four goods** to start: food, medicine, ammo, materials.
+- **Factions act about once per game day** (one meaningful move each: trade, raid, hoard, truce, ...).
+- **Players cannot join factions in v1.0**; they only stand well or badly with them.
+- **Visibility:** while provisional, a full-transparency debug map (every settlement's stock,
+  order and faction). The intended player-facing view is rumors: NPC conversations foreshadow
+  shortages, raids and successions.
+- **Leaders die permanently** (as with the permadeath setting); a successor takes over.
+- Build order and the horizon list: BACKLOG F19-F23 and "Horizon". A headless soak run that
+  fast-forwards weeks of history guards against degenerate outcomes (everyone starves, one
+  faction eats the map).
+
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 
 ## Long character arcs

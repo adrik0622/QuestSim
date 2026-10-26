@@ -69,7 +69,7 @@ public static class BuildChecks
             string original = v2.ToJsonString(); File.WriteAllText(path, original);
             var migrated = WorldStorage.Load(path);
             string backup = Directory.GetFiles(dir, "world.json.v2-*.bak").Single();
-            check(File.ReadAllText(path) == original && File.ReadAllText(backup) == original && migrated.Version == 4 &&
+            check(File.ReadAllText(path) == original && File.ReadAllText(backup) == original && migrated.Version == 5 &&
                 migrated.Supplies[0] == WorldSave.InitialSupplies[0] with { Count = 0 } && migrated.Supplies[1] == WorldSave.InitialSupplies[1] &&
                 migrated.BuildReceipts.Count == 0 && migrated.Receipts.Count == 2,
                 "v2 migration backs up original bytes, keeps bandage results and adds one stocked panel crate");

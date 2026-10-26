@@ -1,74 +1,52 @@
-# Current task: E1 / population and rumor experiment
+# Current task: F19 / settlement economy and the soak run
 
-Status: complete 2026-10-26; results in E1_RESULTS.md. Next: E1b (spatial sort) awaits director approval. Q02b is complete
-(Q02B_RESULTS.md). Experimental and disposable: measurements decide what is kept.
-Push verified checkpoints to origin/main occasionally; never force-push.
+Status: implemented 2026-10-26 (STATE.md has the evidence). Director: "let's move forward";
+decisions in DIRECTOR.md "Depth". Change from the plan: "at least one settlement recovers" moved
+to F20/F21 (nothing resupplies a settlement until trade or raids exist); the recovery path itself
+is a domain check. Previous task E1 is complete (E1_RESULTS.md). Experimental: measurements and
+playtests decide what is kept.
 
 ## Question
 
-How many persistent agents (humans and zombies, with factions) can one server tick
-with movement, spatial contact and rumor spread, on CPU and on GPU, measured end to
-end, and does a GPU path stay off the authoritative tick despite readback latency?
+Can 229 settlements with four goods produce, consume, share and run short in a way that gives
+factions real reasons to trade or fight, stays stable over weeks of history, and shows up for
+players (debug map now, rumors always)?
 
 ## Scope
 
-A headless console experiment in `experiments/population/` (plain C#, no Godot game,
-no networking). Separate from `src/`; nothing in the shipped game depends on it.
-
-0. **Vulkan backend spike (≤1 day).** Vulkan is the chosen API (Windows/Linux; macOS a
-   stretch goal). Kernels are GLSL compute shaders using 32-bit integers only (two u32
-   for the 64-bit rumor mask). Try Godot RenderingDevice on a server without a window
-   first; if it cannot create a Vulkan device headless, use Vulkan directly via
-   Silk.NET with the same GLSL. Record the evidence and the choice.
-1. **World.** Seeded rudimentary generation: settlements on a 2D plane joined by a
-   road graph. Pinned PRNG algorithm (implemented in code) plus a generator version.
-2. **Agents as arrays.** One slot per agent, never reused: fixed-point uint32 X/Y
-   (millimetres), kind (human/zombie), faction, home settlement, movement state, and a
-   64-bit "heard" mask for active rumors. Humans: 3 factions; zombies: 2 horde factions.
-   Humans travel roads or wander near home; hordes drift toward attractors.
-3. **Tick.** Game time runs at 48:1 (Valheim-like; one game day = 30 real minutes,
-   director 2026-10-26). A population tick defaults to 1 real second = 48 game seconds
-   (configurable), separate from the 20 Hz detailed authority tick. Integer-only movement, spatial binning into a uniform grid, contact within
-   a radius. Each step reads the previous state and writes the next, so results never
-   depend on thread order.
-4. **Facts and rumors.** The CPU owns a fact log (id, tick, place, kind, provenance) and a
-   rumor table (≤64 active slots → fact id, credibility). Spread: human contacts pass a
-   rumor if a deterministic hash test passes (credibility × faction trust). Agents
-   forget at a fade rate; a rumor with no carriers retires and its slot is versioned
-   before reuse. A scripted event seeds a rumor ("a settlement's leader died").
-5. **Readback.** The GPU appends "agent heard rumor R" events to a compact list; the
-   CPU consumes it asynchronously one or more ticks later. The authoritative tick never
-   waits for it.
-6. **Faction aggregates.** Counts per faction per region by reduction, on both paths.
-7. **Persistence.** Binary snapshot (header: seed, generator version, counts, tick).
-8. **Inspection.** A small density/rumor-coverage image per run (PPM → PNG via ImageMagick).
+1. **Goods and profiles.** Food, medicine, ammo, materials. Each settlement gets a seeded
+   profile (towns and about a quarter of districts farm; some workshops, a few clinics; the
+   rest mixed) that sets production per resident per game day. Units are person-days; all
+   integer arithmetic.
+2. **State (CPU-owned, saved).** Stock per good, order 0-100, hours short of food. Residents
+   are living humans whose home is the settlement (counted in the population step). Save
+   schema 5; v4 saves migrate (byte-exact backup) and get the generated starting economy.
+3. **Hourly step (game hour = 75 population ticks at 48:1).** Production minus consumption;
+   stock capped at 30 days (surplus spoils); same-faction neighbours along roads share part
+   of the difference in days-of-food; the Choir shares only with the Choir. Order falls while
+   food or medicine is short and recovers otherwise. Hungry, disorderly settlements send a
+   share of residents to the neighbour with the most food per person (refugees travel there).
+4. **Facts.** "shortage" when a settlement runs out of food or medicine (a rumor), "recovered"
+   when it is supplied again (fact only). Hysteresis so a settlement on the edge does not spam.
+5. **Prices.** Price of a good per settlement from days of stock (shown on the map; used by F23).
+6. **Soak run.** Headless console tool: a population plus economy fast-forwarded N game days
+   from a seed; a timeline (JSON) and map images; fails on degenerate history.
+7. **Debug map (M in the client).** Settlements by faction and size, roads, shortages, order
+   and stock; the player's position. Full transparency, provisional.
 
 ## Acceptance
 
-- CPU reference and GPU produce bit-identical state hashes every tick for the same seed
-  (sorted event lists compared).
-- Same seed → same hashes across runs. Save after N ticks, load, run M == run N+M straight.
-- Agent count and IDs are conserved; no slot reuse; faction totals match per-agent data.
-- Rumor spread is measurable (coverage over time), stops when it fades, and never
-  changes the fact log. Retired rumor slots do not leak old beliefs into a new rumor.
-- Delaying readback by k ticks leaves authoritative tick time and results unchanged.
+- Same seed, same economy every run; save after N hours and reload equals running straight.
+- Goods are conserved apart from production, consumption, spoilage (all counted per hour).
+- Soak (30 game days, 100k agents): no good is short everywhere or nowhere; at least one
+  settlement runs short and at least one recovers; the share of short settlements stays below
+  half after day 3; no faction loses more than half its residents to migration; order stays
+  in 0-100.
+- Facts and rumors appear for shortages; a player can hear about one by asking an NPC.
+- v4 saves migrate with a byte-exact backup; protocol bumped for the map data.
+- test_all green on Linux and Windows.
 
-## Measure
+## Not in this task
 
-Agent counts 10⁵, 10⁶, 10⁷ (10⁸ only if memory allows, with jobs memory-capped):
-ms/tick split into movement, binning, spread, aggregates, upload, dispatch, sync and
-readback; memory (RAM/VRAM); readback latency; snapshot size and save/load time. Record
-commit, seed, OS, CPU/GPU/driver, runtime and build type (ENGINE_RULES measurement rules).
-
-## Excluded
-
-Godot game integration, networking, detail tiers and promotion (E2), quests and
-story-time creation, rumor distortion/variants, zombie politics beyond a faction tag,
-pathfinding, combat, deaths/births. Inventories remain shared and synchronized for all
-players (DIRECTOR.md) whenever later work touches them.
-
-## Stop
-
-When the measurements and checks above are recorded in a short E1 results file with a
-recommendation (CPU only, GPU, or hybrid; scale reached; latency handling) and the next
-experiment (E2: detail tiers). Report negative results honestly.
+Faction decisions, caravans, raids, leaders, player trading (F20-F23); per-person economies
+(Horizon).

@@ -32,13 +32,14 @@ All tools are local to the repo (no global installs): Godot 4.6.2 mono in `.tool
 bash scripts/install_godot.sh          # pinned, SHA-256-checked Godot download into .tools/
 bash scripts/check.sh                  # offline Release build + domain checks (no engine); log in .artifacts/logs/checks.log
 bash scripts/build_game.sh             # Godot C# build of src/QuestSim.Game; must be zero warnings/errors
+bash scripts/run_soak.sh [--days 30]   # F19 soak: fast-forward population + economy, fails on degenerate history
 
 bash scripts/run_server.sh [--port=N] [--bind=IP] [--save=PATH]   # headless authoritative server, default 127.0.0.1:27840
 bash scripts/run_client.sh alice [--host=...] [--port=N]          # each client in its own terminal; profile name is arg 1
 ```
 
 Testing is local-first (director 2026-10-26): `bash scripts/test_all.sh` runs everything with a summary
-(`--quick` for domain + core ENet suites, `--all` adds the 8-player load test). The GitHub workflow is manual-only.
+(`--quick` for domain + core ENet suites, `--all` adds the 8-player load test and the 30-day soak). The GitHub workflow is manual-only.
 A Windows test machine is reachable as `ssh kings@whitetop` (Git Bash shell, repo at `~/Projects/QuestSim`, sandbox:
 admin rights, safe to install tools); see RUNBOOK "Windows test machine". Test scripts must stay cross-platform
 (`pause()`/`gpu_handles()` in verify_multiplayer.py, no POSIX signals, `python` vs `python3`).
@@ -84,7 +85,8 @@ and disable compiler servers; keep those flags when invoking `dotnet` directly.
   requests, `keys`, `capture`), `--status=PATH`, `--shutdown-file=PATH`.
 - Nightly v1.0 domain files: `CityGen.cs` (seeded integer world, chunks), `Population.cs` (coarse agents, rumor
   spread), `Living.cs` (tiers, NPC behaviour, combat), `Defeat.cs` (defeat outcomes, item ledger, Virtual Game Master),
-  `Rumors.cs` (facts → rumors, asking, faction standing), `PopulationStore.cs` (snapshots), `Content.cs` (data items, mods).
+  `Rumors.cs` (facts → rumors, asking, faction standing), `PopulationStore.cs` (snapshots), `Content.cs` (data items, mods),
+  `Economy.cs` (F19: four goods per settlement, hourly, saved; `tools/QuestSim.Soak` fast-forwards it; client `MapView.cs` = M debug map).
   The authority touches population arrays only between coarse ticks (background task). All item movements between
   holders go through `Transfer` (ledgered); never edit inventories of named NPCs or caches directly.
 - `experiments/presentation/` — the preserved, disposable Q00 2D/sprite3D/poly3D comparison (`run_presentation.sh`); not the game.
@@ -98,8 +100,8 @@ Core invariants (see ENGINE_RULES.md "World invariants"):
   hand-edit stock or prune receipts. A new item, cost or crate needs matching validation rules.
 - Fixed content positions matter to tests: Q01 movement suites walk Alice +X along z=0 and Bob ±Z along x=−4.
 - World time pauses with zero joined characters. Disconnected characters vanish but keep identity/inventory.
-- Versioning: save schema 4, wire `ProtocolVersion` 5, content ID `questsim:city-v1`. Unknown/incomplete
+- Versioning: save schema 5, wire `ProtocolVersion` 6, content ID `questsim:city-v1`. Unknown/incomplete
   saves fail closed. Changing IDs, saves or messages requires stating compatibility and backing up saves before
-  migration (v1–v3 saves get a byte-exact `.v<n>-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3→v4). Protocol changes require rebuilding server and all clients.
+  migration (v1–v4 saves get a byte-exact `.v<n>-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3→v4→v5). Protocol changes require rebuilding server and all clients.
 - Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: Linux and native Windows 11 (whitetop, RX 5700; full `test_all.sh --all` minus Xvfb screens), loopback 2–8 players,
   one Linux client against a Windows server over LAN. Exports, WAN, a graphical Windows client and power-loss durability are unverified.

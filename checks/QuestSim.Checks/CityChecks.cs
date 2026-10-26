@@ -112,7 +112,7 @@ public static class CityChecks
             string original = v3.ToJsonString(); File.WriteAllText(path, original);
             var migrated = WorldStorage.Load(path);
             string backup = Directory.GetFiles(dir, "world.json.v3-*.bak").Single();
-            check(File.ReadAllText(backup) == original && migrated.Version == 4 && migrated.WorldSeed == WorldSave.DefaultSeed &&
+            check(File.ReadAllText(backup) == original && migrated.Version == 5 && migrated.WorldSeed == WorldSave.DefaultSeed &&
                   WorldSave.Perimeter.All(w => migrated.Blocks.Count(b => b == w) == 1) && migrated.HalfExtent == CityGen.Half,
                 "Q02b v3 save migrates to the city once, with an exact backup and the room enclosed");
         }

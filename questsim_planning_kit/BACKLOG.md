@@ -105,14 +105,59 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
   whole district standing in a 40 m square all night; dead NPCs lie where they fell for 90 s
   (outside the detail budget, not saved); damage floats up as red numbers.
 
-### F18 - Deeper danger: zones with more or less violence (idea, director 2026-10-26)
-Instead of tuning one global fight rate, procedurally give districts a character: some are
-safer, some are lawless (crime, Choir activity, horde routes). Fight and encounter odds,
-patrols and rumors would follow the zone, so where you are matters. Not designed yet; the
-current NPC-vs-NPC fight rate stays as it is until then.
+### F18 - Deeper danger: zones with more or less violence (director 2026-10-26)
+Instead of tuning one global fight rate, districts get a character: some safer, some lawless
+(crime, Choir activity, horde routes). Now planned as step 5 of the depth work: each
+settlement's order (F19) plus control and patrols sets fight, crime and encounter odds, so
+danger follows from the economy instead of being hand-placed. Fight rate unchanged until then.
+
+### Depth: economy, factions, leaders (director 2026-10-26; DIRECTOR.md)
+Build order; each step is a CURRENT_TASK with its own acceptance gate and runs the soak.
+
+### F19 - Settlement economy and the soak run (step 1)
+Four goods (food, medicine, ammo, materials) per settlement: stock, production by profile
+(farm, workshop, clinic, mixed), consumption by living residents, spoilage cap, everyday
+sharing along roads within a faction. Shortages lower order; hunger sends residents away as
+refugees; shortages and recoveries become facts, shortages spread as rumors. Saved (save v5).
+Headless soak fast-forwards weeks and fails on degenerate history. A full-transparency
+debug map in the client (M).
+
+### F20 - Faction relations and daily decisions (step 2)
+A faction-to-faction relations grid; once per game day each faction scores its options from
+needs, strength and its leader's traits: trade, raid, hoard, seek a truce, recruit. Decisions
+are facts. Deterministic and integer.
+
+### F21 - Caravans and raid parties as physical groups (step 3)
+A trade or raid is a group of travelling agents carrying ledgered goods along the roads.
+Near players they become full NPCs who can be escorted, ambushed, robbed or joined in a
+fight; outcomes change both settlements' stocks and the relations grid.
+
+### F22 - Leaders and succession (step 4)
+One leader and 2-3 lieutenants per faction (named NPCs at a headquarters settlement) with
+traits that weight the daily decision. Succession by death (permanent), retirement or coup
+(support collapses after shortages or defeats); the successor is chosen by a fixed rule. Every
+handover is a fact and a rumor and opens opportunities (bounty, protection, backing a claimant).
+
+### F23 - Opportunities and player trade hooks (step 6, after F18)
+The Game Master turns the above into opportunities (escort, warn, deliver, intercept,
+assassinate, protect). Players buy and sell at scarcity prices and deliver or steal goods,
+changing real stocks. Rumors foreshadow what the debug map shows.
+
+### Horizon (pushed past v1.0, director 2026-10-26)
+- Per-person jobs, needs, schedules and inventories (possibly per-agent economics on the GPU).
+- Full markets: merchant agents, currencies, inflation, contracts, debts.
+- Diplomacy as negotiation: treaties, talks, dialogue with leaders.
+- Sieges, front lines and territory wars across districts; settlements changing hands in battle.
+- Policing, laws and organised crime.
+- Leader personalities with memory and relationships, dynasties, aging, faction splits and
+  new factions forming.
+- Players founding, joining and ranking up in factions; governing settlements.
+- Horde alphas and smarter zombie behaviour.
+- Crafting chains and more than four goods.
+- A player-facing map (the debug map is provisional; the intended view is rumors).
 
 ### Not in v1.0
-Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS, code mods (data-only for now; stay mindful of a later transition).
+See also "Horizon" above. Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS, code mods (data-only for now; stay mindful of a later transition).
 
 ## Q00 - Bound the experiment
 

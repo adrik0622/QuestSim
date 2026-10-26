@@ -53,7 +53,7 @@ public static class PickupChecks
             string original = v1.ToJsonString(); File.WriteAllText(path, original);
             var migrated = WorldStorage.Load(path);
             string backup = Directory.GetFiles(dir, "world.json.v1-*.bak").Single();
-            check(File.ReadAllText(path) == original && File.ReadAllText(backup) == original && migrated.Version == 4 &&
+            check(File.ReadAllText(path) == original && File.ReadAllText(backup) == original && migrated.Version == 5 &&
                 migrated.Characters.Single(c => c.Id == a.Id).Inventory[item] == 1 && migrated.Tick == world.State.Tick && migrated.Blocks.SequenceEqual(world.State.Blocks),
                 "Q01 migration validates and backs up original bytes, preserving character/world facts");
             WorldStorage.Save(path, migrated);

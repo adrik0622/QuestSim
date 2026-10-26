@@ -2,7 +2,7 @@
 # Local test runner: bash scripts/test_all.sh [--quick | --all]
 #   default  domain checks, game build, every ENet suite, living world, Xvfb screens, E1 population checks
 #   --quick  domain checks, game build and the core ENet suites
-#   --all    default plus the 8-player / 1M-agent load test
+#   --all    default plus the 8-player / 1M-agent load test and the 30-day economy soak
 # Logs: .artifacts/logs/test_all/<timestamp>/<step>.log. Exit code is non-zero if any step fails.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -64,6 +64,7 @@ if [ "$mode" != "--quick" ]; then
 fi
 if [ "$mode" = "--all" ]; then
   step load-8-players capped 14G "$py" scripts/verify_load.py
+  step soak-30-days capped 8G bash scripts/run_soak.sh --days 30 --agents 100000
 fi
 
 echo

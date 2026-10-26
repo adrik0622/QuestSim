@@ -1,0 +1,129 @@
+using System.Text.Json;
+using QuestSim.Domain;
+using static LivingChecks;
+
+public static class EconomyChecks
+{
+    static void Hours(Population pop, List<SettlementState> states, ref long hour, int hours, EconomyTally? tally = null, List<EconomyEvent>? events = null)
+    {
+        for (int h = 0; h < hours; h++)
+        {
+            for (int t = 0; t < Economy.TicksPerHour; t++) pop.Step();
+            Economy.Hour(pop, states, ++hour, events ?? new(), tally);
+        }
+    }
+
+    static string Json(List<SettlementState> states) => JsonSerializer.Serialize(states);
+    static long Total(List<SettlementState> states, int good) => states.Sum(s => s.Stock[good]);
+
+    public static void Run(Action<bool, string> check)
+    {
+        var city = new CityGen(WorldSave.DefaultSeed);
+        var pop = new Population(city, 40_000);
+        var states = Economy.Create(pop, city);
+        var profiles = states.GroupBy(s => s.Profile).ToDictionary(g => g.Key, g => g.Count());
+        check(states.Count == pop.Settlements.Count && profiles.Count == 4 &&
+              pop.Settlements.Where(s => city.BiomeAt(s.X, s.Z) != Biome.Urban).All(s => states[s.Index].Profile == Economy.Farm) &&
+              states.All(s => pop.Residents[s.Index] == 0 || Economy.Days10(s, pop.Residents[s.Index], Good.Food) is >= 49 and <= 101),
+            $"every settlement gets a profile ({string.Join(", ", profiles.OrderBy(p => p.Key).Select(p => $"{Economy.ProfileNames[p.Key]} {p.Value}"))}; countryside farms) and 5-10 days of stock");
+
+        // Same seed, same history; goods only appear or vanish through production, consumption and spoilage.
+        var before = Enumerable.Range(0, Economy.Goods).Select(g => Total(states, g)).ToArray();
+        var tally = new EconomyTally();
+        long hour = 0;
+        Hours(pop, states, ref hour, 6, tally);
+        var twin = new Population(city, 40_000);
+        var twinStates = Economy.Create(twin, city);
+        long twinHour = 0;
+        Hours(twin, twinStates, ref twinHour, 6);
+        check(Json(states) == Json(twinStates), "the same seed produces the same economy, hour by hour");
+        check(Enumerable.Range(0, Economy.Goods).All(g => Total(states, g) == before[g] + tally.Produced[g] - tally.Consumed[g] - tally.Spoiled[g]),
+            "goods are conserved: stock changes only by production, consumption and spoilage (sharing moves, never creates)");
+
+        // Saving the economy and the population mid-run and continuing equals running straight through.
+        var bytes = new MemoryStream();
+        using (var w = new BinaryWriter(bytes, System.Text.Encoding.UTF8, leaveOpen: true)) pop.Write(w);
+        var restored = new Population(city, 40_000);
+        bytes.Position = 0;
+        using (var r = new BinaryReader(bytes)) restored.Read(r);
+        var restoredStates = JsonSerializer.Deserialize<List<SettlementState>>(Json(states))!;
+        long restoredHour = hour;
+        Hours(pop, states, ref hour, 3);
+        Hours(restored, restoredStates, ref restoredHour, 3);
+        check(Json(states) == Json(restoredStates) && pop.Residents.SequenceEqual(restored.Residents), "save mid-run and reload continues exactly like running straight");
+
+        // Everyday sharing: a well-stocked settlement passes food along a road to an allied neighbour, never to a rival.
+        int giver = Enumerable.Range(0, states.Count).First(s => pop.Residents[s] > 0 && pop.Neighbours(s).Any(b => Economy.Allied(pop, s, b) && pop.Residents[b] > 0));
+        int taker = pop.Neighbours(giver).First(b => Economy.Allied(pop, giver, b) && pop.Residents[b] > 0);
+        states[giver].Stock[0] = pop.Residents[giver] * 1000L * 25; states[taker].Stock[0] = 0;
+        Economy.Hour(pop, states, ++hour, new());
+        check(states[taker].Stock[0] > 0, $"allied neighbours share along the road (settlement {giver} fed {taker})");
+        int choir = Enumerable.Range(0, states.Count).FirstOrDefault(s => pop.SettlementFaction[s] == Population.Hostile && pop.Residents[s] > 0 &&
+            pop.Neighbours(s).All(b => pop.SettlementFaction[b] != Population.Hostile), -1);
+        if (choir >= 0)
+        {
+            foreach (int b in pop.Neighbours(choir)) states[b].Stock[0] = pop.Residents[b] * 1000L * 25;
+            states[choir].Profile = Economy.Mixed; states[choir].Stock[0] = 0;
+            Economy.Hour(pop, states, ++hour, new());
+            check(states[choir].Stock[0] == 0, "the Hollow Choir gets nothing from its non-Choir neighbours");
+        }
+
+        // A settlement that runs out reports a shortage; after a hungry day in unrest people leave for the best-fed allied
+        // neighbour; supplies arriving end the shortage.
+        int hungry = Enumerable.Range(0, states.Count).First(s => pop.Residents[s] > 50 && pop.SettlementFaction[s] != Population.Hostile &&
+            pop.Neighbours(s).Any(b => pop.SettlementFaction[b] != Population.Hostile && pop.Residents[b] > 0));
+        foreach (int b in pop.Neighbours(hungry)) states[b].Stock[0] = pop.Residents[b] * 1000L * 20;
+        var s0 = states[hungry];
+        s0.Profile = Economy.Mixed; s0.Stock[0] = 0; s0.Order = 30; s0.HoursHungry = 23; s0.Reported = 0;
+        int residentsBefore = pop.Residents[hungry];
+        var events = new List<EconomyEvent>();
+        var moved = new EconomyTally();
+        Economy.Hour(pop, states, ++hour, events, moved);
+        var refugees = Enumerable.Range(0, pop.Count).Where(i => (pop.Info[i] & Population.Travelling) != 0 && Population.FactionOf(pop.Info[i]) < Population.HumanFactions &&
+            pop.Neighbours(hungry).Contains((int)(pop.Info[i] & 0xFFFFFF))).ToArray();
+        check(events.Contains(new EconomyEvent("shortage", hungry, Good.Food)) && s0.Order < 30 && s0.HoursHungry == 24,
+            "running out of food reports a shortage, lowers order and counts hungry hours");
+        check(moved.Refugees > 0 && pop.Residents[hungry] == residentsBefore - moved.Refugees && refugees.Length >= moved.Refugees,
+            $"after a hungry day in unrest, people leave for a better-fed neighbour and join it ({moved.Refugees} of {residentsBefore} this hour)");
+        s0.Stock[0] = pop.Residents[hungry] * 1000L * 10;
+        events.Clear();
+        Economy.Hour(pop, states, ++hour, events);
+        check(events.Contains(new EconomyEvent("recovered", hungry, Good.Food)) && (s0.Reported & 1) == 0, "supplies arriving end the shortage (a recovery fact)");
+        check(Economy.Price(s0, pop.Residents[hungry], Good.Food) < Economy.Price(new SettlementState { Stock = [1000, 0, 0, 0] }, pop.Residents[hungry], Good.Food),
+            "prices rise as stock runs low");
+
+        // In the server: the economy runs once per game hour; a shortage becomes a fact, a rumor and something NPCs tell you.
+        var world = new WorldAuthority(new WorldSave { Population = 20_000 }, synchronousPopulation: true) { PromotionClearance = 0 };
+        var alice = world.Join(2, new string('e', 32), "Eve");
+        Steps(world, WorldAuthority.PopulationEvery);
+        int plaza = world.Pop!.Settlements.First(s => s.Spawn).Index;
+        var home = world.State.Settlements[plaza];
+        home.Profile = Economy.Mixed; home.Stock[0] = 0;
+        foreach (int b in world.Pop.Neighbours(plaza)) world.State.Settlements[b].Stock[0] = 0;
+        while (!world.State.Facts.Any(f => f.Kind == "shortage")) Steps(world, WorldAuthority.PopulationEvery);
+        var listener = Summon(world, false, alice.X + 1.5, alice.Z, faction: world.Pop.SettlementFaction[plaza]);
+        Steps(world, WorldAuthority.PopulationEvery * 3);
+        listener.X = alice.X + 1.5; listener.Z = alice.Z;
+        var told = world.Ask(2);
+        check(world.State.Facts.Any(f => f.Kind == "shortage" && f.Subject == $"settlement:{plaza}" && f.Object == "food") &&
+              world.Snapshot(2).Settlements!.Single(s => s.Index == plaza).Short != 0 && told.Lines.Any(l => l.Contains("going hungry")),
+            $"a shortage at the plaza becomes a fact, shows on the map data and NPCs talk about it (\"{told.Lines.FirstOrDefault()}\")");
+
+        string dir = Path.Combine(Path.GetTempPath(), "questsim-economy-" + Guid.NewGuid().ToString("N"));
+        string path = Path.Combine(dir, "world.json");
+        try
+        {
+            WorldStorage.Save(path, world.State);
+            var saved = WorldStorage.Load(path);
+            check(Json(saved.Settlements) == Json(world.State.Settlements) && saved.EconomyTicks == world.State.EconomyTicks, "the economy is saved with the world (save v5)");
+            var v4 = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+            v4["Version"] = 4; v4.Remove("Settlements"); v4.Remove("EconomyTicks");
+            string original = v4.ToJsonString(); File.WriteAllText(path, original);
+            var migrated = WorldStorage.Load(path);
+            string backup = Directory.GetFiles(dir, "world.json.v4-*.bak").Single();
+            check(File.ReadAllText(backup) == original && migrated.Version == 5 && migrated.Settlements.Count == 0,
+                "v4 saves migrate to v5 with an exact backup; their economy is generated on the first step");
+        }
+        finally { if (Directory.Exists(dir)) Directory.Delete(dir, true); }
+    }
+}

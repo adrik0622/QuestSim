@@ -39,6 +39,7 @@ public sealed class Population
     public uint Tick { get; private set; }
     public List<Settlement> Settlements { get; }
     public int[] SettlementFaction { get; }
+    public int[] Residents { get; }   // living humans per home settlement, counted each step (the economy's workforce and mouths)
     readonly uint[] settleX, settleZ, adjOff, adj;
 
     // Game clock at 48:1: one population tick is 48 game seconds; the world starts at 08:00 on day one.
@@ -57,6 +58,7 @@ public sealed class Population
         (Settlements, var links) = city.Settlements();
         int s = Settlements.Count;
         settleX = Settlements.Select(x => ToMm(x.X)).ToArray(); settleZ = Settlements.Select(x => ToMm(x.Z)).ToArray();
+        Residents = new int[s];
         SettlementFaction = Settlements.Select(x => x.Spawn ? 0 : Hash4((uint)Seed, 77, (uint)x.Index, 0) % 10 == 0 ? Hostile : x.X < 0 ? 0 : 1).ToArray();
         var lists = Enumerable.Range(0, s).Select(_ => new List<uint>()).ToArray();
         foreach (var (a, b) in links) { lists[a].Add((uint)b); lists[b].Add((uint)a); }
@@ -94,6 +96,7 @@ public sealed class Population
             if (Hash4((uint)Seed, 14, i, 0) % 10 == 0) Info[i] = (info & ~0xFFFFFFu) | Dormant;
             else if (IsZombie(info)) TargetZombies++; else TargetHumans++;
         }
+        CountResidents();
         BuildGrid();
     }
 
@@ -151,12 +154,14 @@ public sealed class Population
                     c.Info = Info[c.Agent]; c.Lo = MaskLo[c.Agent]; c.Hi = MaskHi[c.Agent];
                 }
             });
-        Parallel.ForEach(partitions, () => (Carriers: new uint[64], Members: new long[16]), (range, _, local) =>
+        var residents = new int[Settlements.Count];
+        Parallel.ForEach(partitions, () => (Carriers: new uint[64], Members: new long[16], Residents: new int[Settlements.Count]), (range, _, local) =>
         {
             for (int i = range.Item1; i < range.Item2; i++)
             {
                 uint info = Info[i];
                 if ((info & Dead) == 0) local.Members[FactionOf(info)]++;
+                if ((info & (Dead | Zombie)) == 0) local.Residents[info & 0xFFFFFF]++;
                 if (spreading) Spread((uint)i, tick, rumors!, local.Carriers);
                 else
                 {
@@ -166,7 +171,13 @@ public sealed class Population
                 }
             }
             return local;
-        }, local => { lock (carriers) for (int k = 0; k < 64; k++) { carriers[k] += local.Carriers[k]; } lock (members) for (int k = 0; k < 16; k++) members[k] += local.Members[k]; });
+        }, local =>
+        {
+            lock (carriers) for (int k = 0; k < 64; k++) { carriers[k] += local.Carriers[k]; }
+            lock (members) for (int k = 0; k < 16; k++) members[k] += local.Members[k];
+            lock (residents) for (int k = 0; k < residents.Length; k++) residents[k] += local.Residents[k];
+        });
+        Array.Copy(residents, Residents, residents.Length);
         Array.Copy(nextLo, MaskLo, Count); Array.Copy(nextHi, MaskHi, Count);
         Array.Copy(carriers, Carriers, 64); Array.Copy(members, Members, 16);
         Tick++;
@@ -318,6 +329,25 @@ public sealed class Population
         return keep;
     }
 
+    public IEnumerable<int> Neighbours(int settlement)
+    {
+        for (uint k = adjOff[settlement]; k < adjOff[settlement + 1]; k++) yield return (int)adj[k];
+    }
+
+    // Living humans at home in a settlement (not detailed, not already on the road), in index order.
+    public IEnumerable<uint> HomeResidents(int settlement)
+    {
+        for (uint i = 0; i < Count; i++)
+            if ((Info[i] & (Zombie | Dead | Detailed | Travelling)) == 0 && (Info[i] & 0xFFFFFF) == settlement) yield return i;
+    }
+
+    // A refugee: new home (and its faction), walking there along the road. Only between ticks.
+    public void Relocate(uint i, int settlement)
+    {
+        Info[i] = Travelling | ((uint)SettlementFaction[settlement] << 24) | (uint)settlement;
+        TgtX[i] = settleX[settlement]; TgtZ[i] = settleZ[settlement];
+    }
+
     // Snapshot of the mutable arrays (detail flags excluded: a loaded world starts with no detailed agents).
     const string Magic = "QSPOP";
     public void Write(BinaryWriter w)
@@ -335,7 +365,14 @@ public sealed class Population
         foreach (var array in new[] { PosX, PosZ, TgtX, TgtZ, Info, MaskLo, MaskHi })
             for (int i = 0; i < Count; i++) array[i] = r.ReadUInt32();
         Tick = tick;
+        CountResidents();
         BuildGrid();
+    }
+
+    void CountResidents()
+    {
+        Array.Clear(Residents);
+        for (uint i = 0; i < Count; i++) if ((Info[i] & (Dead | Zombie)) == 0) Residents[Info[i] & 0xFFFFFF]++;
     }
 
     public bool Knows(uint i, int slot) => slot < 32 ? (MaskLo[i] & (1u << slot)) != 0 : (MaskHi[i] & (1u << (slot - 32))) != 0;

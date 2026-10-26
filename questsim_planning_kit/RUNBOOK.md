@@ -236,6 +236,15 @@ bash scripts/test_all.sh --all      # also the 8-player / 1M-agent load test
 Logs go to `.artifacts/logs/test_all/<timestamp>/`; steps whose tools are missing (Xvfb, Vulkan)
 are reported as SKIP. The GitHub Actions workflow is manual-only (Actions tab → checks → Run).
 
+## Economy soak and debug map (F19, 2026-10-26)
+
+`bash scripts/run_soak.sh --days 30 --agents 100000 [--seed N] [--out DIR] [--map-every 5]`
+builds `tools/QuestSim.Soak` and fast-forwards a population and its economy (about 3 minutes
+for 30 game days). Prints a line per day, writes `timeline.json` and `map-dayNN.png` to
+`.artifacts/soak/<timestamp>/`, and exits non-zero on degenerate history. `test_all.sh --all`
+runs it. In the client, M toggles the debug map (hover a settlement for stock and order);
+`scripts/inspect_world.py` prints an economy summary from a save.
+
 ## Windows test machine (2026-10-26)
 
 `ssh kings@whitetop` (192.168.1.119, entry in `~/.ssh/config`): Windows 11 Home, Ryzen 5 2600,

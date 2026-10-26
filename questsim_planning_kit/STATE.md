@@ -73,5 +73,19 @@ of ghosts" was a whole district standing in a 40 m square at night). 127 domain 
 test_all green on Linux (incl. Xvfb screens) and on whitetop. Fight rate unchanged; zones with
 more or less violence recorded as F18.
 
-Next action: director playtests again (bodies, night streets, placeholders); then choose the
-next task, e.g. F15 extensive building, F18 danger zones, or a graphical Windows playtest.
+2026-10-26 (depth, F19 settlement economy): director chose the depth plan (DIRECTOR.md "Depth";
+BACKLOG F19-F23 and "Horizon"). F19 implemented: four goods per settlement (profiles farm 61,
+workshop 31, clinic 22, mixed 115), hourly production/consumption/spoilage, sharing along roads
+within a faction (the Choir only with the Choir), order, shortages as facts and rumors ("People
+are going hungry at the plaza"), refugees after a hungry day in unrest, prices; save v5 (v4
+migrates with backup), protocol 6; M opens a full-transparency debug map; `scripts/run_soak.sh`
+fast-forwards 30 game days at 100k agents in ~3 min. 140 domain checks, test_all --all green.
+Soak (30 days): food shortages in up to 4% of settlements and medicine in 12% (isolated Choir and
+clinic-less pockets), no recoveries yet (nothing brings supplies until trade/raids, F20-F21),
+mean order 81. Finding for the director: humans decline from day ~11 (67k -> 59k by day 30 at
+100k agents) because zombie attrition outlasts the 10% dormant reserve and dead slots are never
+reused; over months a world would empty. Options: births or arrivals that reuse long-dead slots
+under a new generation number (IDs like npc:N.g), or a larger reserve.
+
+Next action: F20 faction relations and daily decisions (CURRENT_TASK to be written), unless
+the director wants a playtest of F19 first; decide the population-decline option above.

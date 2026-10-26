@@ -1,6 +1,6 @@
 """Read-only world inspector: python3 scripts/inspect_world.py [path/to/world.json] [--facts N] [--actor NAME]
 Summarises a save for debugging: characters, conditions, factions, opportunities, named NPCs, caches, the item ledger,
-recent facts, and the population snapshot header. Never writes anything."""
+the settlement economy, recent facts, and the population snapshot header. Never writes anything."""
 import argparse
 import json
 import struct
@@ -52,6 +52,18 @@ def main():
     for i, name in enumerate(FACTIONS[:3]):
         value = standing.get(i, DEFAULT_STANDING[i])
         print(f"  {name:<18} {value:+4d}{'  HOSTILE' if value <= -50 else ''}")
+
+    if w.get('Settlements'):
+        goods, profiles = ['food', 'medicine', 'ammo', 'materials'], ['farm', 'workshop', 'clinic', 'mixed']
+        st = w['Settlements']
+        short = [x for x in st if x['Reported']]
+        stock = ', '.join('%s %s' % (g, format(sum(x['Stock'][i] for x in st) // 1000, ',')) for i, g in enumerate(goods))
+        print(f"\nEconomy: {len(st)} settlements, {w.get('EconomyTicks', 0) // 75} game hours; "
+              f"stock (units; 1 food feeds one person a day) {stock}; "
+              f"mean order {sum(x['Order'] for x in st) / len(st):.0f}, unrest {sum(1 for x in st if x['Order'] < 40)}, reporting shortages {len(short)}")
+        for x in sorted(short, key=lambda x: x['Order'])[:8]:
+            print(f"  settlement {x['Index']:<4} {profiles[x['Profile']]:<8} order {x['Order']:>3}  short of "
+                  f"{', '.join(g for i, g in enumerate(goods) if x['Reported'] >> i & 1)}; hungry {x['HoursHungry']} h")
 
     if w.get('Opportunities'):
         print('\nOpportunities')

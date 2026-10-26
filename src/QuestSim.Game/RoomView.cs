@@ -24,6 +24,7 @@ public partial class RoomView : Node3D
     public event Action<string>? AttackRequested;
     public event Action? AskRequested, UseRequested, InspectRequested;
     private readonly Label inspector = new() { Position = new Vector2(12, 430), Visible = false };
+    private readonly MapView map = new() { Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore };
     private double inspectorSeconds;
     public void ShowInspection(string text) { inspector.Text = text; inspector.Visible = true; inspectorSeconds = 8; }
 
@@ -43,6 +44,8 @@ public partial class RoomView : Node3D
         layer.AddChild(hudBack);
         hud.Position = new Vector2(12, 8); hud.AddThemeFontSizeOverride("font_size", 17); layer.AddChild(hud);
         inspector.AddThemeFontSizeOverride("font_size", 15); inspector.AddThemeColorOverride("font_color", new Color(1, .95f, .6f)); layer.AddChild(inspector);
+        map.SetAnchorsPreset(Control.LayoutPreset.FullRect); layer.AddChild(map);
+        layer.MoveChild(map, 0);   // under the HUD text
     }
     private static MeshInstance3D Box(Node3D parent, Vector3 p, Vector3 size, Color color)
     {
@@ -53,6 +56,7 @@ public partial class RoomView : Node3D
     {
         Box(this, new Vector3(0, -.08f, 0), new Vector3(12, .2f, 12), new Color(.25f, .28f, .3f));   // floor top 2 cm above the city ground
         city = new CityGen(state.WorldSeed);
+        map.SetCity(city);
         // Ground is drawn per streamed chunk only (no overlapping layers to z-fight); fog hides the streaming edge.
         foreach (var road in city.Roads)
         {
@@ -266,7 +270,7 @@ public partial class RoomView : Node3D
         Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
         elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal | I inspect\n" +
+            "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal | I inspect | M map\n" +
             $"Present: {state?.Actors.Count(a => a.Kind == 0 || a.Health > 0) ?? 0} | {clock}" +
             string.Concat((state?.Factions ?? []).Where(f => f.Id < 3).Select(f => $" | {f.Name} {f.Standing:+0;-0}")) + "\n" +
             $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
@@ -276,6 +280,11 @@ public partial class RoomView : Node3D
         if ((inspectorSeconds -= delta) <= 0) inspector.Visible = false;
         if (state is null) return;
         ApplyTimeOfDay(state.Tick);
+        if (city is not null && state.Settlements is not null)
+        {
+            var own = state.Actors.FirstOrDefault(a => a.Id == ownId);
+            map.UpdateMap(state.Settlements, own is null ? Vector2.Zero : new Vector2((float)own.X, (float)own.Z));
+        }
         DrawCrowd(delta);
         DrawHits(delta);
         if (!roomBuilt) BuildRoom(state);
@@ -332,6 +341,7 @@ public partial class RoomView : Node3D
         if (key.Keycode == Key.U) UseRequested?.Invoke();
         if (key.Keycode == Key.I) InspectRequested?.Invoke();
         if (key.Keycode == Key.C) firstPerson = !firstPerson;
+        if (key.Keycode == Key.M) map.Visible = !map.Visible;
         if (key.Keycode == Key.R) { Yaw = -Mathf.Pi / 2; elevation = .65f; }
     }
 }

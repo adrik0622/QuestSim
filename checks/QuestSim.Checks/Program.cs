@@ -45,3 +45,4 @@ RumorChecks.Run(Check);
 ContentChecks.Run(Check);
 AcceptanceChecks.Run(Check);
 WireChecks.Run(Check);
+EconomyChecks.Run(Check);
