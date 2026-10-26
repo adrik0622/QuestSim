@@ -225,7 +225,18 @@ All use fresh disposable fixtures; actual play saves are not edited by tests.
 The lost-reply test sends SIGSTOP/CONT/KILL only to its tracked test children.
 It never suspends user processes. Q02_RESULTS.md contains evidence and limitations.
 
-## Nightly v1.0 foundation (branch `nightly`)
+## Running every test (local-first)
+
+```bash
+bash scripts/test_all.sh            # domain, build, all ENet suites, living world, Xvfb screens, E1 checks
+bash scripts/test_all.sh --quick    # ~1.5 min: domain + build + core ENet suites
+bash scripts/test_all.sh --all      # also the 8-player / 1M-agent load test
+```
+
+Logs go to `.artifacts/logs/test_all/<timestamp>/`; steps whose tools are missing (Xvfb, Vulkan)
+are reported as SKIP. The GitHub Actions workflow is manual-only (Actions tab → checks → Run).
+
+## Nightly v1.0 foundation (merged into main 2026-10-26)
 
 Same build and launch commands. New server options: `--population=N` (new worlds; default
 1,000,000; tests use 0 or 100k), `--population-save-seconds=S` (default 60), `--content=DIR`

@@ -37,6 +37,9 @@ bash scripts/run_server.sh [--port=N] [--bind=IP] [--save=PATH]   # headless aut
 bash scripts/run_client.sh alice [--host=...] [--port=N]          # each client in its own terminal; profile name is arg 1
 ```
 
+Testing is local-first (director 2026-10-26): `bash scripts/test_all.sh` runs everything with a summary
+(`--quick` for domain + core ENet suites, `--all` adds the 8-player load test). The GitHub workflow is manual-only.
+
 Acceptance/regression suites (real server/client processes over ENet; headless unless noted):
 
 ```bash

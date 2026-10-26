@@ -1,10 +1,7 @@
-# Domain checks on Linux and Windows, plus the population experiment's CPU reference checks.
-# No GPU or Godot on hosted runners: game/ENet/screen suites stay local (see RUNBOOK.md).
+# Manual only (director 2026-10-26: testing is local-first via scripts/test_all.sh).
+# Run from the GitHub Actions tab when a hosted Linux/Windows check is wanted; nothing runs on push.
 name: checks
 on:
-  push:
-    branches: [main, nightly]
-  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -54,8 +51,7 @@ jobs:
         run: dotnet build src/QuestSim.Game -warnaserror
 
   game-suites:
-    # Manual only (Actions tab -> checks -> Run workflow): real headless server/client ENet suites with the pinned Godot.
-    if: github.event_name == 'workflow_dispatch'
+    # Real headless server/client ENet suites with the pinned Godot.
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
