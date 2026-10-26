@@ -151,6 +151,14 @@ times. Under discussion for v1.0: richer procedural map generation, proper navme
 simulated NPCs, multi-story houses (stretch: keep people on ground floors), and whether a
 small LLM could fill NPC response templates. Agreed: the rest of the road to v1.0 in
 HANDOFF_2026-10-26.md. Tuning defaults wait for polishing passes.
+- **Always-on worlds:** a server option to keep the world running with nobody connected
+  (default stays paused).
+- **Navigation is the map priority:** the generated city is fine; the problem is that full
+  NPCs wander mindlessly and walk into walls indefinitely. v1.0 needs real navigation
+  (navmeshes) for simulated NPCs; multi-story houses remain a stretch.
+- **Combat feel, gamified:** like The Last of Us, the reticle is an open circle that tightens
+  with skill. Beyond v1.0 (Horizon): preparing guns, ammunition and magazines through
+  interactive minigames that award XP (in the spirit of Schedule I).
 - **Hosting:** both dedicated servers and player-hosted games from the client; Steam
   integration (Steam networking/connections) is a stretch goal.
 - **Captives:** no placeholder needed yet; idea: captured players are taken to a faction

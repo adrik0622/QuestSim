@@ -179,6 +179,8 @@ changing real stocks. Rumors foreshadow what the debug map shows.
 - Horde alphas and smarter zombie behaviour.
 - Crafting chains and more than four goods.
 - A player-facing map (the debug map is provisional; the intended view is rumors).
+- Weapon, ammunition and magazine preparation as interactive minigames that award XP
+  (director 2026-10-26, Schedule I-like); v1.0 only has the skill-tightened open reticle.
 
 ### Not in v1.0
 See also "Horizon" above. Art beyond placeholders, content volume, deep combat, crafting trees, item rarity/affixes/loot tables, polished UI, more than 8 players, macOS, code mods (data-only for now; stay mindful of a later transition).
