@@ -107,6 +107,25 @@ public partial class RoomView : Node3D
         return node;
     }
 
+    // Pull the third-person camera in front of the first wall or building between the eye and the camera.
+    private float CameraDistance(WorldSnapshot state, Vector3 eye, Vector3 direction, float wanted)
+    {
+        for (float t = .5f; t <= wanted; t += .25f)
+        {
+            var p = eye + direction * t;
+            bool blocked = state.Blocks.Any(b => Mathf.Abs(p.X - (float)b.X) < b.Width / 2 && Mathf.Abs(p.Z - (float)b.Z) < b.Depth / 2 && p.Y < b.Height);
+            if (!blocked && city is not null)
+            {
+                int cx = (int)Mathf.Floor(p.X / CityGen.ChunkSize), cz = (int)Mathf.Floor(p.Z / CityGen.ChunkSize);
+                for (int dx = -1; dx <= 1 && !blocked; dx++)
+                    for (int dz = -1; dz <= 1 && !blocked; dz++)
+                        blocked = city.Chunk(cx + dx, cz + dz).Any(b => Mathf.Abs(p.X - b.X) < b.Width / 2f && Mathf.Abs(p.Z - b.Z) < b.Depth / 2f && p.Y < b.Height);
+            }
+            if (blocked) return Mathf.Max(.3f, t - .3f);
+        }
+        return wanted;
+    }
+
     // World ticks are 20 per real second; at 48:1 each tick is 2.4 game seconds.
     private void ApplyTimeOfDay(long tick)
     {
@@ -209,7 +228,8 @@ public partial class RoomView : Node3D
             if (firstPerson) { camera.Position = eye; camera.Rotation = new Vector3(.65f - elevation, Yaw, 0); }
             else
             {
-                camera.Position = eye + new Vector3(Mathf.Sin(Yaw) * 6 * Mathf.Cos(elevation), 6 * Mathf.Sin(elevation), Mathf.Cos(Yaw) * 6 * Mathf.Cos(elevation));
+                var offset = new Vector3(Mathf.Sin(Yaw) * Mathf.Cos(elevation), Mathf.Sin(elevation), Mathf.Cos(Yaw) * Mathf.Cos(elevation));
+                camera.Position = eye + offset * CameraDistance(state, eye, offset, 6);
                 camera.LookAt(eye);
             }
         }
