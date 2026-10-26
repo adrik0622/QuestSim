@@ -1,6 +1,8 @@
 # Current task: Q00 / environment and presentation probe
 
-Authorized 2026-10-25. One implementer; one bounded desktop-discovery helper allowed.
+Status 2026-10-25: comparison complete; director selection pending.
+One implementer; one bounded desktop-discovery helper used read-only.
+See PRESENTATION_EXPERIMENT.md for evidence and STATE.md for one next action.
 
 Order: inspect actual files/tools; launch the smallest Godot .NET project;
 compare presentation; report evidence for director selection; continue only

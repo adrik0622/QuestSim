@@ -28,7 +28,10 @@ World structure (flat/stacked/continuous 3D), representation (sprites/polygons/v
 hybrid) and camera are separate decisions. First- and third-person are preferences
 to investigate against cost and gameplay, not architecture requirements. Keep
 Godot .NET/C# unless an actual blocker justifies reconsideration; no engine survey.
-Use the one-day disposable comparison in CURRENT_TASK.md before investing in assets.
+The one-day disposable comparison is complete; see PRESENTATION_EXPERIMENT.md
+for measurements, screenshots and limitations. Low-poly 3D with first/third-person
+is the implementation recommendation; director selection remains pending. No
+production assets or pipeline expansion before that decision.
 
 ## Remaining creative contract
 

@@ -1,14 +1,21 @@
 # QuestSim
 
 Living multiplayer-world experiment, beginning with cooperative zombie survival.
-Current milestone: development environment and a bounded presentation comparison.
+The current milestone compares disposable presentation choices; none is selected.
 
-- `bash scripts/check.sh` builds/runs the offline C# actor-fixture checks.
-- Godot launch scaffold: `experiments/presentation/` (not compiled or launched yet).
-- [Runbook](questsim_planning_kit/RUNBOOK.md): exact commands and missing prerequisites.
-- [State](questsim_planning_kit/STATE.md): observed results and next action.
-- [Presentation evidence](questsim_planning_kit/PRESENTATION_EXPERIMENT.md): all visual candidates currently untested.
-- [Director decisions](questsim_planning_kit/DIRECTOR.md): confirmed rules and deferred scope.
+```bash
+bash scripts/install_godot.sh
+bash scripts/check.sh
+bash scripts/build_presentation.sh
+bash scripts/run_presentation.sh 2d
+# Alternatives: sprite3d third, sprite3d first, poly3d third, poly3d first
+```
 
-Godot .NET and desktop access are blocked in the current sandbox. No presentation
-has been selected. The offline fixture is not a multiplayer server or game.
+Godot 4.6.2 .NET and .NET 10.0.110 build and launch on the current Linux desktop.
+Use WASD, Q/E and arrows; C changes 3D camera, R resets, click selects/places the
+construction piece. No server or persistence yet.
+
+[Comparison and evidence](questsim_planning_kit/PRESENTATION_EXPERIMENT.md) ·
+[Runbook](questsim_planning_kit/RUNBOOK.md) ·
+[State](questsim_planning_kit/STATE.md) ·
+[Director decisions](questsim_planning_kit/DIRECTOR.md)

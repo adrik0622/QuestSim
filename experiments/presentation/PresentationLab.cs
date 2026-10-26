@@ -12,8 +12,8 @@ public partial class PresentationLab : Node
 {
     private readonly PresentationScenario scenario = new();
     private string mode = "2d", view = "overhead", report = "";
-    private Node3D space = new();
-    private Camera3D camera = new();
+    private Node3D space = null!;
+    private Camera3D camera = null!;
     private Node3D[] actors = new Node3D[5];
     private readonly List<(Node3D pivot, int actor, float phase)> limbs = new();
     private ImageTexture sprite = null!, topSprite = null!;
@@ -118,6 +118,8 @@ public partial class PresentationLab : Node
     }
     private void Build3D()
     {
+        space = new Node3D();
+        camera = new Camera3D();
         AddChild(space);
         var environment = new Godot.Environment
         {
@@ -194,9 +196,8 @@ public partial class PresentationLab : Node
         elapsed += delta;
         scenario.Step(delta);
         poses = scenario.GetActors();
-        var input = Input.GetVector("ui_left", "ui_right", "ui_up", "ui_down");
         // WASD leaves arrows available for elevation when testing 3D cameras.
-        input = new Vector2((Input.IsPhysicalKeyPressed(Key.D) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.A) ? 1 : 0),
+        var input = new Vector2((Input.IsPhysicalKeyPressed(Key.D) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.A) ? 1 : 0),
                             (Input.IsPhysicalKeyPressed(Key.S) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.W) ? 1 : 0));
         if (input.LengthSquared() > 1) input = input.Normalized();
         if (mode != "2d")
@@ -295,8 +296,17 @@ public partial class PresentationLab : Node
 
     private void PrintState(string reason)
     {
-        Vector2 screen = mode == "2d" ? Origin + piece * Scale : camera.UnprojectPosition(new Vector3(piece.X, .5f, piece.Y));
-        GD.Print($"STATE {reason} player={player.X:0.3},{player.Y:0.3} height={Height(player):0.00} piece_screen={screen.X:0.0},{screen.Y:0.0} selected={selected} placed={placedCount} rejected={rejectedCount} blocked={blockedMoves}");
+        Vector2 Screen(Vector2 p, float height) => mode == "2d" ? Origin + p * Scale : camera.UnprojectPosition(new Vector3(p.X, height, p.Y));
+        var pieceScreen = Screen(piece, .5f);
+        var validScreen = Screen(piece == new Vector2(-1, 3) ? new Vector2(-2, 3) : new Vector2(-1, 3), 0);
+        var wallScreen = Screen(new Vector2(0, 3), 0);
+        GD.Print("STATE ", JsonSerializer.Serialize(new {
+            reason, mode, camera = view, player_x = player.X, player_z = player.Y, height = Height(player),
+            piece_screen_x = pieceScreen.X, piece_screen_y = pieceScreen.Y,
+            valid_screen_x = validScreen.X, valid_screen_y = validScreen.Y,
+            wall_screen_x = wallScreen.X, wall_screen_y = wallScreen.Y,
+            selected, placedCount, rejectedCount, blockedMoves
+        }));
     }
     private void WriteReport()
     {

@@ -1,92 +1,82 @@
 # QuestSim runbook
 
-Working directory: `/home/adrikingston/Projects/QuestSim`. Logs live in
-`.artifacts/logs/`; generated caches stay in `.local/`. No packages added globally.
+Run from `/home/adrikingston/Projects/QuestSim`. No global packages installed.
+Downloads are in `.tools/`; .NET caches in `.local/`; full logs, screenshots and
+raw metrics in `.artifacts/`. These generated directories are ignored by Git.
 
-## Verified here — 2026-10-25
+## Verified toolchain — 2026-10-25
 
-| Operation | Command / result |
+- Manjaro linux-x64; .NET SDK **10.0.110**, runtime **10.0.10**, MSBuild 18.0.11.
+  `global.json` pins the installed SDK exactly.
+- Godot **4.6.2.stable.mono.official.71f334935**, Linux x86_64 .NET distribution.
+  Keep its GodotSharp directory beside the binary. The local NuGet.Config uses its
+  bundled SDK packages; Godot and the net10.0 projects build and launch together.
+- X11 `DISPLAY=:0`; Python 3.14, Pillow, xdotool and ImageMagick `import` installed.
+- Ryzen 9 5950X, 32 GiB RAM, RTX 3080 Ti, NVIDIA 610.57.04. Desktop was in ordinary
+  use during tests; not a controlled or minimum-spec benchmark machine.
+
+Initial sandbox DNS and X11 EPERM failures are **resolved after full access**.
+No bridge, privilege change or modification to the sibling project was needed.
+Original sandbox checkpoints remain in `.artifacts/checkpoints/000-*` and `001-*`.
+After full access .git was absent; a normal local repository was initialized.
+`git log --oneline` now verifies real checkpoints. No remote configured or pushed.
+
+## Build and launch
+
+| Command | Result / purpose |
 | --- | --- |
-| Versions | `dotnet --info`: SDK 10.0.110, MSBuild 18.0.11, runtime 10.0.10, Manjaro linux-x64; exact SDK in global.json |
-| Offline build + checks | `bash scripts/check.sh`: Release build, 0 warnings/errors, seven checks pass |
-| Initial restore failure | `restore-first-failure.log`: unused transitive Microsoft.AspNetCore.App.Ref requested but not installed |
-| Restore diagnosis | DisableTransitiveFrameworkReferenceDownloads=true avoids unused pack download; no ASP.NET dependency added |
-| Godot build attempt | Command below fails MSB4236, bundled Godot.NET.Sdk unavailable; godot-build.log |
-| Desktop | DISPLAY=:0, X11; xdotool/xwininfo/Pillow cannot connect; socket connect returns EPERM |
-| Downloads | `curl -I -L --max-time 10 https://api.github.com/repos/godotengine/godot/releases/latest` fails DNS, exit 6 |
-| Git | `git status --short` fails: empty read-only .git is not a repository |
+| `bash scripts/install_godot.sh` | Pinned official archive, SHA-256 checked, local extraction; preserves existing installation. Initial download/extraction steps verified manually; preservation branch verified through script. |
+| `bash scripts/check.sh` | Offline Release build and seven domain fixture checks; no network/engine/persistence claim. |
+| `bash scripts/build_presentation.sh` | Godot C# Debug build, zero warnings/errors. |
+| `.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64 --headless --path experiments/presentation --quit-after 2` | Bootstrap smoke; prints `QUESTSIM_BOOTSTRAP_READY actors=4`. This is not an authoritative server. |
+| `bash scripts/run_presentation.sh 2d` | Overhead sprites. |
+| `bash scripts/run_presentation.sh sprite3d third` | 3D room with billboard sprites; `first` also available. |
+| `bash scripts/run_presentation.sh poly3d third` | 3D room with primitive polygon characters; `first` also available. |
+| `python3 scripts/desktop_test.py` | Launches bootstrap, verifies owned window, captures before/after and confirms a focused Space press. |
+| `python3 scripts/verify_presentation.py` | Real X11 keyboard/mouse acceptance tests and screenshots for all three modes and both 3D cameras. |
+| `python3 scripts/benchmark_presentation.py` | Five sequential rendered-window samples: 10s warmup + 30s frame intervals each; writes `.artifacts/benchmarks/*.json`. |
 
-`check.sh` uses a local empty NuGet feed because these two projects have no package
-dependencies. It disables compiler/build servers for socket-restricted execution.
-The checks prove fixture behavior and the local C# toolchain only; no game launch,
-network, persistence, collision or performance claim follows.
+The standalone domain check avoids downloading unused ASP.NET targeting packs via
+`DisableTransitiveFrameworkReferenceDownloads=true`. Build scripts disable compiler
+servers for reproducibility in restricted sessions; initial diagnosis is retained
+in `.artifacts/logs/restore-first-failure.log` and `restore-diagnosis.log`.
 
-## Godot prerequisite and blocked command
+Godot source: [official 4.6.2 archive](https://godotengine.org/download/archive/4.6.2-stable/).
+Archive SHA-256: `7d53302c31648ad98b620e8ca5b0c869c1066495770e62b2fa770cfeb004f167`,
+verified against official GitHub release asset metadata and downloaded bytes.
+Installed prerequisites follow the [official C# documentation](https://docs.godotengine.org/en/4.6/tutorials/scripting/c_sharp/c_sharp_basics.html).
 
-Scaffold chooses Godot **4.6.2 .NET Linux x86_64** as the reproducible candidate,
-not an established compatible runtime result. Keep GodotSharp alongside its binary.
-Official [archive/download](https://godotengine.org/download/archive/4.6.2-stable/)
-and [C# prerequisites](https://docs.godotengine.org/en/4.6/tutorials/scripting/c_sharp/c_sharp_basics.html)
-provide the engine and separate SDK requirement. .NET 10 is installed; its
-combination with this Godot build still needs an actual launch test.
+## Controls and scenario
 
-A normal environment with download access must supply the extracted distribution:
-`.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64` and
-`.tools/godot/GodotSharp/Tools/nupkgs/`. Check archive integrity against the official
-release checksum before extraction. No download/install succeeded in this sandbox.
-`experiments/presentation/NuGet.Config` points only to those bundled packages.
+WASD moves; Q/E turns/orbits in 3D; arrows tilt; C switches first/third person;
+R resets player/camera, retaining construction; Escape cancels selection. Click the
+yellow cube to select, then a ground cell to move it. Red preview rejects walls,
+actors, platforms and bounds. Space logs a state snapshot for acceptance assertions.
+These are disposable keyboard camera controls; no mouse-look/gamepad/production feel.
 
-Actual failed command (after supplying the distribution, rerun unchanged):
+Same 12m room, four deterministic moving actors, 2m doorway, three raised steps and
+one 1m construction cube. Blue player plus four NPCs = five visible actors in third
+person/overhead; the player's own mesh is hidden in first person. World coordinates
+remain independent of rendered nodes. NPCs intentionally overlap; no avoidance or
+NPC collision. Basic player wall/piece checks are a presentation proxy, not physics
+or authoritative simulation acceptance. Steps do not prove stacked-floor support.
 
-```bash
-export DOTNET_CLI_HOME="$PWD/.local/dotnet"
-export NUGET_PACKAGES="$PWD/.local/nuget"
-dotnet build experiments/presentation/QuestSim.Presentation.csproj -c Debug -p:DisableTransitiveFrameworkReferenceDownloads=true -p:UseSharedCompilation=false --disable-build-servers > .artifacts/logs/godot-build.log 2>&1
-```
+## Desktop method and limits
 
-Following commands are **not run**, pending that prerequisite; they are the next
-launch checks, not verified commands:
+Read-only inspection found the running sibling `../pokeys-100-days-gone/scripts/desktop_control.py`.
+Its Project Zomboid launcher/queue was not invoked or changed. QuestSim's small
+`scripts/desktop_test.py` reuses the approach with native subprocess calls:
+launch a fixed QuestSim scene, match PID plus exact title (including Godot's DEBUG
+suffix), activate and confirm focus, bound input holds and release keys in finally,
+then capture only the owned window and inspect the resulting screenshot/log.
+No arbitrary window attachment, network listener or background service.
 
-```bash
-.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64 --version
-.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64 --headless --path experiments/presentation --quit-after 2
-.tools/godot/Godot_v4.6.2-stable_mono_linux.x86_64 --path experiments/presentation
-```
+Direct X11 now works. If future sandbox policy blocks it again, these commands
+cannot grant permissions. The fallback proposal is a foreground, QuestSim-only
+file-queue helper launched from a normal desktop terminal, following the sibling
+pattern. It is unnecessary now and has not been implemented/tested.
 
-Headless smoke must print `QUESTSIM_BOOTSTRAP_READY actors=4` without errors.
-This is a launch scaffold, not a CPU authoritative server. Window title should be
-`QuestSim Presentation Lab`. A focused Space press should increment visible text
-and log `QUESTSIM_PROBE_SPACE 1`. This behavior is unverified until actually run.
-
-## Desktop discovery and exact missing capability
-
-Read-only discovery found sibling `../pokeys-100-days-gone/scripts/desktop_control.py`.
-It launches/tracks Project Zomboid specifically and writes sibling runtime files;
-do not invoke it for QuestSim. No sibling file was modified. Relevant reusable
-pattern: track launched child PID, locate window by PID and expected title,
-activate and verify focus, capture screenshot, send bounded input with finally
-key release, then inspect result. Never send keys to an unverified active window.
-
-Python 3.14, tkinter/Tk 8.6, Pillow, xdotool, xprop/xwininfo, ImageMagick `import`
-and Xvfb are installed. Their presence does not grant desktop access. Both
-`/tmp/.X11-unix/X0` and the abstract X socket reject connect with EPERM in this
-sandbox; `prerequisites.log` preserves failures. No screenshot was captured.
-Xvfb would not prove access to the user's desktop and was not substituted.
-
-Required capability: a permitted connection to the desktop's X server. A normal
-terminal process could potentially host the sibling-style foreground file-queue
-bridge entirely in QuestSim, but no bridge was built or tested: engine and direct
-access are absent, and existing tools already identify the permission boundary.
-Do not attempt privilege escalation or claim a bridge bypass was verified.
-
-## Checkpoints and later checks
-
-Original planning inputs: `.artifacts/checkpoints/000-original-planning.tar.gz`.
-Current source/docs: `.artifacts/checkpoints/001-bootstrap.tar.gz`, with
-`001-bootstrap.sha256` and a per-file manifest alongside it. These replace Git
-checkpoints only while .git remains unavailable; generated caches are excluded.
-
-CPU authority, two independent clients, reconnect/persistence, paused empty-world
-clock, desktop exports and other target machines: **not implemented/tested**.
-Run these only at their milestone. See PRESENTATION_EXPERIMENT.md for the bounded
-visual comparison before selecting a pipeline.
+GUI checks briefly focus QuestSim. Keep unrelated apps out of the foreground during
+the bounded suite. Test processes terminate afterward; the sibling helper stays running.
+No desktop exports, remote platforms, server, two-client networking, persistence,
+reconnect or empty-world clock have been implemented/tested yet.
