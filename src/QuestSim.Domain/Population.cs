@@ -275,6 +275,8 @@ public sealed class Population
     // Generated identity: never stored, identical everywhere for the same seed and agent.
     static readonly string[] First = ["Ada", "Bram", "Cora", "Dell", "Esme", "Finn", "Greer", "Hal", "Ines", "Jory", "Kit", "Lena", "Milo", "Nell", "Otto", "Pia", "Quin", "Rhea", "Sol", "Tess", "Uri", "Vera", "Wade", "Yara"];
     static readonly string[] Last = ["Ash", "Barrow", "Cole", "Dunn", "Ember", "Fisk", "Grove", "Hale", "Irons", "Kerr", "Lowe", "Marsh", "North", "Pike", "Reed", "Stone", "Thorne", "Vale", "Wren", "Yates"];
-    public string NameOf(uint i) => IsZombie(Info[i]) ? "Zombie" : $"{First[Hash4((uint)Seed, 11, i, 0) % First.Length]} {Last[Hash4((uint)Seed, 12, i, 0) % Last.Length]}";
+    public string NameOf(uint i) => GeneratedName(Seed, i, IsZombie(Info[i]));
+    public static string GeneratedName(ulong seed, uint i, bool zombie) =>
+        zombie ? "Zombie" : $"{First[Hash4((uint)seed, 11, i, 0) % First.Length]} {Last[Hash4((uint)seed, 12, i, 0) % Last.Length]}";
     public int BaseHealth(uint i) => IsZombie(Info[i]) ? 60 : 80 + (int)(Hash4((uint)Seed, 13, i, 0) % 21);
 }

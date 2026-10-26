@@ -10,7 +10,9 @@ public partial class Session : Node
     private ENetMultiplayerPeer network = null!;
     private WorldAuthority? authority;
     private RoomView? view;
-    private WorldSnapshot? snapshot;
+    private WorldSnapshot? snapshot, world;
+    private readonly Dictionary<long, string> sentWorld = new();
+    private long worldBytes, actorPacketBytes;
     private CharacterRecord? own;
     private string profileId = "", profileName = "", savePath = "", statusPath = "", intentPath = "", shutdownPath = "";
     private string connection = "Connecting";
@@ -216,14 +218,27 @@ public partial class Session : Node
             GD.Print("INTENT_REJECTED peer=", Multiplayer.GetRemoteSenderId());
     }
 
-    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = 2)]
-    public void ReceiveSnapshot(string json)
+    // World part (blocks, crates, opportunities, caches, factions): JSON, reliable, only when it changes.
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable, TransferChannel = 3)]
+    public void ReceiveWorld(string json)
     {
         if (server) return;
-        var received = JsonSerializer.Deserialize<WorldSnapshot>(json, WorldStorage.JsonOptions) ?? throw new InvalidDataException("Empty snapshot");
+        var received = JsonSerializer.Deserialize<WorldSnapshot>(json, WorldStorage.JsonOptions) ?? throw new InvalidDataException("Empty world");
         if (received.Version != WorldAuthority.ProtocolVersion) { Disconnected("Incompatible snapshot version"); return; }
-        if (snapshot is not null && received.Sequence <= snapshot.Sequence) return;
-        snapshot = received;
+        world = received;
+        worldBytes += json.Length;
+        if (snapshot is not null) snapshot = world with { Actors = snapshot.Actors, Sequence = snapshot.Sequence, Tick = snapshot.Tick };
+    }
+
+    // Actors: compact binary at 10 Hz, unreliable ordered; stale packets are dropped by sequence.
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.UnreliableOrdered, TransferChannel = 2)]
+    public void ReceiveActors(byte[] data)
+    {
+        if (server || world is null) return;
+        var (sequence, tick, actors) = Wire.DecodeActors(data, world.WorldSeed);
+        actorPacketBytes = data.Length;
+        if (snapshot is not null && sequence <= snapshot.Sequence) return;
+        snapshot = world with { Actors = actors, Sequence = sequence, Tick = tick };
     }
 
     private void RequestPickup(bool retry, string requestId = "", string containerId = "")
@@ -496,10 +511,21 @@ public partial class Session : Node
     {
         snapshot = authority!.Snapshot();
         foreach (var (peer, _) in authority.ActivePeers)
-            RpcId(peer, nameof(ReceiveSnapshot), JsonSerializer.Serialize(authority.Snapshot(peer)));
+        {
+            var view = authority.Snapshot(peer);
+            string worldJson = JsonSerializer.Serialize(view with { Actors = [], Sequence = 0, Tick = 0 });
+            if (sentWorld.GetValueOrDefault(peer) != worldJson)
+            {
+                RpcId(peer, nameof(ReceiveWorld), worldJson);
+                sentWorld[peer] = worldJson;
+            }
+            RpcId(peer, nameof(ReceiveActors), Wire.EncodeActors(view.Sequence, view.Tick, view.Actors,
+                i => authority.State.Named.Any(n => n.Index == i && n.Title.Length > 0)));
+        }
     }
     private void OnPeerLeft(long peer)
     {
+        sentWorld.Remove(peer);
         if (authority is null || failed || !authority.Leave((int)peer)) return;
         try
         {
@@ -512,7 +538,7 @@ public partial class Session : Node
     }
     private void Disconnected(string message)
     {
-        connected = false; connection = message; snapshot = null;
+        connected = false; connection = message; snapshot = null; world = null;
         view?.ClearActors();
         GD.Print("CONNECTION ", message);
     }
@@ -637,7 +663,7 @@ public partial class Session : Node
             characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
             npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
-            populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),
+            actorPacketBytes, worldBytes, populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));
     }
