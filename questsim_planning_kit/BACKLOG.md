@@ -26,7 +26,7 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
 ### F3 - World space and rudimentary generation
 - Outcome: a seeded, versioned region (settlements, roads, biome tiles) split into chunks the client streams. Editable coarse layers, with procedural detail on top (OnceLost-style).
 - Acceptance: the same seed produces the same world; two players can be kilometres apart; generator version is stored in saves.
-- Decision needed: v1.0 world size (tens vs hundreds of km²).
+- v1.0 world (director 2026-10-26): one city plus outskirt towns, population roughly **1 million** agents (humans + zombies; ratio TBD). Proposed footprint ~40 × 40 km, revisited once generation exists. At this scale even the CPU path keeps up (E1: ~39 ms/tick at 10⁶), so a GPU raises the ceiling rather than being required.
 
 ### F4 - Persistence at scale
 - Outcome: chunked, incremental binary saves (no full rewrite per autosave), crash recovery, versioned migration, carrying forward the Q01/Q02 guarantees (atomic writes, fail closed, backups before migration).
@@ -40,10 +40,12 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
 - Outcome: interest management (clients receive only relevant nearby state), binary snapshots, protocol versioning.
 - Acceptance: 2–8 players over LAN with bandwidth and tick-time measurements; late join and reconnect converge.
 
-### F7 - Living actors and rudimentary RPG stats
+### F7 - Living actors, rudimentary RPG stats, basic gunplay and melee
 - Outcome: zombies notice, chase, attack and die; humans run simple routines. A small shared stat block for players and NPCs (for example health, stamina, strength, agility, perception, plus a few skills), using the same rules for everyone. NPC base stats are generated from seed + ID; changes are stored as deltas.
 - Acceptance: deterministic combat outcomes in domain checks; stats persist through tiers, reconnects and restarts; deaths are facts with provenance.
 - Keep stats data-defined (namespaced IDs) so later systems can add stats without schema rewrites.
+- **Super basic combat, to improve later:** guns as server-validated hitscan shots (range, damage, fire rate, ammo as items consumed exactly once); melee as a short-range swing (reach, arc, damage, stamina cost). Same rules for players, humans and zombies. Damage and accuracy read the shared stat block. Lag compensation, recoil, ballistics, armour and animation polish are later work.
+- Acceptance: domain checks for hits, misses, out-of-range and ammo/stamina limits; two real clients can shoot and melee zombies and each other with consistent results; no duplicated or lost ammo across retries and restarts.
 
 ### F8 - Facts and knowledge
 - Outcome: a persisted fact graph (who, what, where, typed links) plus rumor beliefs; NPCs answer "what have you heard?" from their actual beliefs (template text; dialogue never owns state).
@@ -58,7 +60,7 @@ with F13 tooling and F14 platform/CI growing alongside from F2 onward.
 - Virtual Game Master: deterministic and rule-based. Watches the fact graph for story-worthy patterns (defeat, shortage, captured ally, debt), scores them (connection to players, proximity, recency, pacing), connects threads with story-time invention, and commits what it creates as shared facts with single-claim rewards. An LLM may later vary phrasing only.
 - First loop: **defeat → capture → escape, teammate rescue, or revenge bounty** for finding and defeating the victor.
 - Acceptance: two-player run where B rescues A or claims the revenge reward exactly once; items, buffs and debuffs, facts and rumors persist through reconnect/restart; abuse caps (no capture loops).
-- Open decisions: can zombie infection ever turn a player? Does a captive's clock run while that player is offline but others play (absent-and-protected suggests it pauses)? Optional permadeath server setting?
+- Decisions (director 2026-10-26, subject to change): **zombie infection can turn a player** (it fits the genre; exact mechanics TBD, e.g. an infection timer with a cure opportunity, and what the player continues as after turning). **A captive's clock pauses while that player is offline**, even if others play. **Permadeath is an optional server setting.**
 
 ### F11 - Items and building as data (start of the mod surface)
 - Outcome: data definitions for item types and building pieces with namespaced IDs, generalizing the Q02 one-offs; exactly-once transfers, costs and receipts carried over.
