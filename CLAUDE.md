@@ -47,6 +47,11 @@ python3 scripts/verify_multiplayer.py        # Q01 network regressions
 python3 scripts/verify_save_failures.py      # persistence fault cases
 ```
 
+Population experiment (E1, `experiments/population/`, headless, not part of the game): `bash scripts/run_population.sh
+check|bench|run|density`. GLSL kernels in `shaders/` must stay integer-only and match the C# reference in
+`CpuBackend.cs` exactly; `check` verifies CPU vs Vulkan bit-identical state. Wrap big runs in
+`systemd-run --user --scope -p MemoryMax=16G -p MemorySwapMax=0` (no swap on this machine).
+
 GUI testing: prefer the Xvfb pattern in `verify_build_screen.py` — intent-file `keys` go through
 `Input.ParseInputEvent`, intent-file `capture` saves a viewport PNG to inspect. Under Xvfb (Mesa llvmpipe)
 Godot logs a V-Sync WARNING that clean-log assertions must ignore. `verify_item_desktop.py`,

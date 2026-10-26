@@ -225,6 +225,22 @@ All use fresh disposable fixtures; actual play saves are not edited by tests.
 The lost-reply test sends SIGSTOP/CONT/KILL only to its tracked test children.
 It never suspends user processes. Q02_RESULTS.md contains evidence and limitations.
 
+## E1 — population and rumor experiment
+
+Headless, disposable, outside the game. Needs a Vulkan driver and `glslc` (Vulkan SDK /
+shaderc); Silk.NET.Vulkan restores from nuget.org on first build.
+
+```bash
+bash scripts/run_population.sh check                        # 12 checks incl. CPU vs Vulkan bit-identical
+bash scripts/run_population.sh bench --agents 1e5,1e6,1e7 --event-every 5   # JSON in .artifacts/population/
+bash scripts/run_population.sh bench --agents 1e7 --backend gpu --pace-ms 1000   # 1 tick/s authority wait
+bash scripts/run_population.sh run --agents 1e6 --world-km 60 --image .artifacts/population/world.png
+bash scripts/run_population.sh density --agents 1e7,1e8      # neighbour-scan diagnostic
+```
+
+Large runs: wrap with `systemd-run --user --scope -p MemoryMax=16G -p MemorySwapMax=0`
+(this desktop has no swap). 10⁸ agents need ~4.7 GiB VRAM. Results: E1_RESULTS.md.
+
 ## Q02b — one wall panel, durable retry
 
 Rebuild **all** processes: save/wire protocol 3, content `questsim:q02b-room-v1`.

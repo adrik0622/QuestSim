@@ -34,6 +34,9 @@ One fixed cell and wall; no demolition, doors, refill, navigation or generic
 construction/inventory. Receipts unpruned. Screen tests use software GL.
 
 Results: Q02B_RESULTS.md. Handoff: ../HANDOFF_2026-10-25.md.
-Next action: E1 population and rumor experiment written in CURRENT_TASK.md
-(2026-10-25), awaiting director approval before implementation. GPU bulk
-simulation and story-time invention are allowed; everything is experimental.
+2026-10-26: E1 population/rumor experiment complete (E1_RESULTS.md). Vulkan via
+Silk.NET (Godot headless has no RenderingDevice). 12 checks pass incl. CPU vs GPU
+bit-identical every tick. ~10⁷ agents at 1 tick/s on RTX 3080 Ti with zero authority
+wait; 10⁸ is 15–30 s/tick because neighbour reads lack locality.
+Next action (awaiting director): E1b, sort agents by grid cell for locality, then
+E2 detail tiers. Everything is experimental; game time 48:1.

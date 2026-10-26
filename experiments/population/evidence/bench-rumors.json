@@ -1,0 +1,181 @@
+{
+  "commit": "5649c13",
+  "os": "Unix 6.18.44.1",
+  "runtime": "10.0.10",
+  "results": [
+    {
+      "backend": "cpu",
+      "agents": 100000,
+      "ticks": 40,
+      "paceMs": 0,
+      "delay": 2,
+      "generateMs": 12.8424,
+      "uploadMs": 4.1551,
+      "stepMeanMs": 10.210402499999999,
+      "stepP50Ms": 9.7181,
+      "stepMaxMs": 22.3624,
+      "phaseMeanMs": {
+        "move": 3.0507299999999997,
+        "insert": 0.8444625,
+        "spread": 6.231685000000001
+      },
+      "roundTripMs": [],
+      "heardEvents": 24654,
+      "eventOverflow": 0,
+      "facts": 8,
+      "peakRssBytes": 70287360,
+      "gpuDeviceBytes": 0,
+      "device": "32 CPU threads"
+    },
+    {
+      "backend": "gpu",
+      "agents": 100000,
+      "ticks": 40,
+      "paceMs": 0,
+      "delay": 2,
+      "generateMs": 6.9147,
+      "uploadMs": 221.7205,
+      "stepMeanMs": 0.8961750000000002,
+      "stepP50Ms": 0.8525,
+      "stepMaxMs": 2.8057,
+      "phaseMeanMs": {
+        "record\u002Bsubmit": 0.022150000000000003,
+        "gpu.clear\u002Bmove": 0.028356,
+        "gpu.insert": 0.006877599999999999,
+        "gpu.spread": 0.47870080000000004,
+        "gpu.copies": 0.32662240000000003,
+        "gpu.total": 0.8405568000000001,
+        "collect.wait": 0.6794999999999999
+      },
+      "roundTripMs": [
+        0.8722,
+        0.8552,
+        1.8897,
+        0.9016,
+        0.9026
+      ],
+      "heardEvents": 24654,
+      "eventOverflow": 0,
+      "facts": 9,
+      "peakRssBytes": 225062912,
+      "gpuDeviceBytes": 13447056,
+      "device": "NVIDIA GeForce RTX 3080 Ti"
+    },
+    {
+      "backend": "cpu",
+      "agents": 1000000,
+      "ticks": 40,
+      "paceMs": 0,
+      "delay": 2,
+      "generateMs": 88.4189,
+      "uploadMs": 1.1726,
+      "stepMeanMs": 38.777122500000004,
+      "stepP50Ms": 38.1699,
+      "stepMaxMs": 54.9036,
+      "phaseMeanMs": {
+        "move": 4.8716925,
+        "insert": 7.2042724999999965,
+        "spread": 26.683040000000005
+      },
+      "roundTripMs": [],
+      "heardEvents": 30865,
+      "eventOverflow": 0,
+      "facts": 8,
+      "peakRssBytes": 219664384,
+      "gpuDeviceBytes": 0,
+      "device": "32 CPU threads"
+    },
+    {
+      "backend": "gpu",
+      "agents": 1000000,
+      "ticks": 40,
+      "paceMs": 0,
+      "delay": 2,
+      "generateMs": 101.9609,
+      "uploadMs": 143.6606,
+      "stepMeanMs": 8.673535000000001,
+      "stepP50Ms": 8.7936,
+      "stepMaxMs": 10.5531,
+      "phaseMeanMs": {
+        "record\u002Bsubmit": 0.03271000000000001,
+        "gpu.clear\u002Bmove": 0.13749120000000006,
+        "gpu.insert": 0.10111439999999998,
+        "gpu.spread": 8.0792272,
+        "gpu.copies": 0.34516800000000003,
+        "gpu.total": 8.663000800000002,
+        "collect.wait": 8.5261025
+      },
+      "roundTripMs": [
+        7.4965,
+        7.4998,
+        7.5818,
+        7.5398,
+        7.5869
+      ],
+      "heardEvents": 30865,
+      "eventOverflow": 0,
+      "facts": 9,
+      "peakRssBytes": 300744704,
+      "gpuDeviceBytes": 56791968,
+      "device": "NVIDIA GeForce RTX 3080 Ti"
+    },
+    {
+      "backend": "cpu",
+      "agents": 10000000,
+      "ticks": 40,
+      "paceMs": 0,
+      "delay": 2,
+      "generateMs": 444.5859,
+      "uploadMs": 1.2669,
+      "stepMeanMs": 1623.1827725000003,
+      "stepP50Ms": 1652.612,
+      "stepMaxMs": 1896.4063,
+      "phaseMeanMs": {
+        "move": 34.86322749999998,
+        "insert": 179.66033,
+        "spread": 1408.649705
+      },
+      "roundTripMs": [],
+      "heardEvents": 33922,
+      "eventOverflow": 0,
+      "facts": 8,
+      "peakRssBytes": 671834112,
+      "gpuDeviceBytes": 0,
+      "device": "32 CPU threads"
+    },
+    {
+      "backend": "gpu",
+      "agents": 10000000,
+      "ticks": 40,
+      "paceMs": 0,
+      "delay": 2,
+      "generateMs": 430.4096,
+      "uploadMs": 247.2847,
+      "stepMeanMs": 117.74041500000003,
+      "stepP50Ms": 117.3603,
+      "stepMaxMs": 142.7745,
+      "phaseMeanMs": {
+        "record\u002Bsubmit": 0.05479999999999998,
+        "gpu.clear\u002Bmove": 1.2842327999999998,
+        "gpu.insert": 2.8854664000000008,
+        "gpu.spread": 113.03955759999997,
+        "gpu.copies": 0.5224895999999999,
+        "gpu.total": 117.73174639999998,
+        "collect.wait": 117.65121749999994
+      },
+      "roundTripMs": [
+        101.0144,
+        100.9947,
+        100.221,
+        100.5372,
+        101.6969
+      ],
+      "heardEvents": 33922,
+      "eventOverflow": 0,
+      "facts": 9,
+      "peakRssBytes": 1051942912,
+      "gpuDeviceBytes": 542670992,
+      "device": "NVIDIA GeForce RTX 3080 Ti"
+    }
+  ]
+}

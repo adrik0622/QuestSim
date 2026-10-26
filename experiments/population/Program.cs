@@ -26,6 +26,7 @@ try
         "check" => Checks.Run(shaderDir, Opt("backend", "cpu,gpu").Contains("gpu")),
         "bench" => Bench(),
         "run" => RunOnce(),
+        "density" => Density(),
         _ => throw new ArgumentException("Commands: check, bench, run")
     };
 }
@@ -89,6 +90,37 @@ int Bench()
     Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
     File.WriteAllText(output, JsonSerializer.Serialize(new { commit = Environment.GetEnvironmentVariable("QUESTSIM_COMMIT"), os = Environment.OSVersion.ToString(), runtime = Environment.Version.ToString(), results }, new JsonSerializerOptions { WriteIndented = true }));
     Console.WriteLine("RESULTS " + output);
+    return 0;
+}
+
+// Diagnostic: how many list entries and real contacts a sample of humans scans (explains spread cost by scale).
+int Density()
+{
+    foreach (long n in Opt("agents", "1e7,1e8").Split(',').Select(Count))
+    {
+        var s = Configure(n);
+        var (w, a) = Generator.Create(s);
+        var heads = new uint[s.TableMask + 1L]; Array.Fill(heads, uint.MaxValue);
+        var next = new uint[n];
+        for (uint i = 0; i < n; i++) { uint h = H.CellOf(a.PosX[i] >> 16, a.PosY[i] >> 16, s.TableMask); next[i] = heads[h]; heads[h] = i; }
+        long scanned = 0, contacts = 0, humans = 0, maxScan = 0;
+        for (long i = 0; i < n; i += Math.Max(1, n / 200_000))
+        {
+            if (a.Info[i] >> 31 == 1) continue;
+            humans++;
+            long local = 0;
+            uint cx = a.PosX[i] >> 16, cy = a.PosY[i] >> 16;
+            for (int oy = -1; oy <= 1; oy++) for (int ox = -1; ox <= 1; ox++)
+                for (uint b = heads[H.CellOf(cx + (uint)ox, cy + (uint)oy, s.TableMask)]; b != uint.MaxValue; b = next[b])
+                {
+                    local++;
+                    long dx = Math.Abs((long)a.PosX[b] - a.PosX[i]), dy = Math.Abs((long)a.PosY[b] - a.PosY[i]);
+                    if (b != i && dx * dx + dy * dy <= (long)s.ContactRadiusMm * s.ContactRadiusMm) contacts++;
+                }
+            scanned += local; maxScan = Math.Max(maxScan, local);
+        }
+        Console.WriteLine($"{n,13:N0} agents, {w.Count:N0} settlements: per human scanned {scanned / (double)humans:F1} (max {maxScan}), contacts {contacts / (double)humans:F2}");
+    }
     return 0;
 }
 

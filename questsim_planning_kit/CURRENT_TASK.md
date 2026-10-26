@@ -1,6 +1,6 @@
 # Current task: E1 / population and rumor experiment
 
-Status: approved 2026-10-26; in progress. Q02b is complete
+Status: complete 2026-10-26; results in E1_RESULTS.md. Next: E1b (spatial sort) awaits director approval. Q02b is complete
 (Q02B_RESULTS.md). Experimental and disposable: measurements decide what is kept.
 Push verified checkpoints to origin/main occasionally; never force-push.
 

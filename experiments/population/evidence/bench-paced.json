@@ -1,0 +1,41 @@
+{
+  "commit": "5649c13",
+  "os": "Unix 6.18.44.1",
+  "runtime": "10.0.10",
+  "results": [
+    {
+      "backend": "gpu",
+      "agents": 10000000,
+      "ticks": 12,
+      "paceMs": 1000,
+      "delay": 2,
+      "generateMs": 536.8934,
+      "uploadMs": 313.9976,
+      "stepMeanMs": 0.5661666666666666,
+      "stepP50Ms": 0.1636,
+      "stepMaxMs": 2.2663,
+      "phaseMeanMs": {
+        "record\u002Bsubmit": 0.07740000000000001,
+        "gpu.clear\u002Bmove": 1.2884,
+        "gpu.insert": 2.9270773333333326,
+        "gpu.spread": 101.13366666666668,
+        "gpu.copies": 0.53316,
+        "gpu.total": 105.88230399999999,
+        "collect.wait": 0
+      },
+      "roundTripMs": [
+        135.5581,
+        135.4868,
+        137.325,
+        138.4934,
+        140.4454
+      ],
+      "heardEvents": 6216,
+      "eventOverflow": 0,
+      "facts": 3,
+      "peakRssBytes": 454918144,
+      "gpuDeviceBytes": 542670992,
+      "device": "NVIDIA GeForce RTX 3080 Ti"
+    }
+  ]
+}
