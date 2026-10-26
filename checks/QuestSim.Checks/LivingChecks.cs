@@ -2,11 +2,11 @@ using QuestSim.Domain;
 
 public static class LivingChecks
 {
-    static void Steps(WorldAuthority w, int n) { for (int i = 0; i < n; i++) w.Step(); }
+    internal static void Steps(WorldAuthority w, int n) { for (int i = 0; i < n; i++) w.Step(); }
     static double Face(double fromX, double fromZ, double toX, double toZ) => Math.Atan2(-(toX - fromX), -(toZ - fromZ));
 
     // Moves a coarse agent of the requested kind next to a point and lets the next tier sync promote it.
-    static Npc Summon(WorldAuthority w, bool zombie, double x, double z, int faction = -1)
+    internal static Npc Summon(WorldAuthority w, bool zombie, double x, double z, int faction = -1)
     {
         var pop = w.Pop!;
         uint i = (uint)Enumerable.Range(0, pop.Count).First(k => Population.IsZombie(pop.Info[k]) == zombie &&

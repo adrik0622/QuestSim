@@ -27,6 +27,7 @@ public partial class Session : Node
     private PickupReceipt? lastPickup;
     private BuildReceipt? lastBuild;
     private AttackResult? lastAttack;
+    private string lastInteract = "";
     private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
@@ -51,6 +52,7 @@ public partial class Session : Node
         public string[] HoldKeys { get; set; } = [];
         public string Capture { get; set; } = "";
         public string Attack { get; set; } = "";
+        public string Interact { get; set; } = "";
     }
 
     public override void _Ready()
@@ -121,7 +123,7 @@ public partial class Session : Node
                     DisplayServer.WindowSetTitle("QuestSim Shared Room");
                     view = new RoomView();
                     AddChild(view);
-                    view.PickupRequested += () => RequestPickup(false);
+                    view.PickupRequested += Interact;
                     view.BuildRequested += () => RequestBuild(false);
                     view.AttackRequested += kind => RequestAttack(kind);
                     view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
@@ -270,6 +272,59 @@ public partial class Session : Node
         }
         itemMessage = retry ? "Retrying build..." : "Placing wall panel...";
         RpcId(1, nameof(PlaceWall), requestId, siteId);
+    }
+
+    // F: free a captive teammate in reach, else loot a cache in reach, else take from the nearest crate.
+    private void Interact()
+    {
+        if (!connected || own is null || snapshot is null) return;
+        var me = snapshot.Actors.FirstOrDefault(a => a.Id == own.Id);
+        if (me is null) { RequestPickup(false); return; }
+        double Reach(double x, double z) => Math.Sqrt((x - me.X) * (x - me.X) + (z - me.Z) * (z - me.Z));
+        if (snapshot.Actors.Any(a => a.Id != own.Id && a.Condition == "captive" && Reach(a.X, a.Z) <= WorldAuthority.RescueReach))
+            RpcId(1, nameof(RequestInteract), "rescue");
+        else if ((snapshot.Caches ?? []).Any(k => Reach(k.X, k.Z) <= WorldAuthority.LootReach))
+            RpcId(1, nameof(RequestInteract), "loot");
+        else RequestPickup(false);
+    }
+
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RequestInteract(string kind)
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        try
+        {
+            string result = kind == "rescue" ? authority.Rescue(peer) : kind == "loot" ? authority.Loot(peer) : "unknown";
+            WorldStorage.Save(savePath, authority.State);   // rescues and loot move items and claim rewards: save before replying
+            RpcId(peer, nameof(InteractReply), kind, result, JsonSerializer.Serialize(authority.CharacterFor(peer).Inventory));
+            Publish();
+            GD.Print($"INTERACT_RESULT peer={peer} kind={kind} result={result}");
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("INTERACT_REJECTED ", e.Message); }
+        catch (Exception e) { Fail(e); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void InteractReply(string kind, string result, string inventoryJson)
+    {
+        if (server || own is null) return;
+        own.Inventory = JsonSerializer.Deserialize<Dictionary<string, int>>(inventoryJson) ?? own.Inventory;
+        lastInteract = result;
+        itemMessage = (kind, result) switch
+        {
+            ("rescue", "rescued") => "You freed your teammate.", ("loot", "looted") => "You took everything in the cache.",
+            ("rescue", _) => "Nobody to free here.", _ => "Nothing to take here."
+        };
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void Retired(string reason)
+    {
+        if (server) return;
+        GD.Print("RETIRED ", reason);
+        Disconnected(reason);
+        network.Close();
     }
 
     private void RequestAttack(string kind)
@@ -424,6 +479,13 @@ public partial class Session : Node
             if (server)
             {
                 authority!.Step();
+                foreach (var (peer, reason) in authority.PendingKicks)
+                {
+                    WorldStorage.Save(savePath, authority.State);
+                    RpcId(peer, nameof(Retired), reason);
+                    network.GetPeer(peer)?.PeerDisconnectLater();
+                }
+                authority.PendingKicks.Clear();
                 if (frame % 2 == 0) Publish();
                 saveElapsed += delta;
                 if (saveElapsed >= 2 && authority.ActiveCount > 0) { WorldStorage.Save(savePath, authority.State); saveElapsed = 0; }
@@ -458,6 +520,7 @@ public partial class Session : Node
         if (command.PickupRequestId.Length > 0 || command.RetryPickup)
             RequestPickup(command.RetryPickup, command.PickupRequestId, command.ContainerId);
         if (command.Attack.Length > 0) RequestAttack(command.Attack);
+        if (command.Interact.Length > 0) RpcId(1, nameof(RequestInteract), command.Interact);
         if (command.BuildRequestId.Length > 0 || command.RetryBuild)
             RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
         // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.
@@ -492,7 +555,8 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack,
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract,
+            opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
             npcs = authority?.Npcs.Count, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count, itemMessage, fps = Engine.GetFramesPerSecond(),
             rssBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64
         }));

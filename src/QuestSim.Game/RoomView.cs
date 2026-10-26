@@ -9,6 +9,7 @@ public partial class RoomView : Node3D
     private bool firstPerson;
     private readonly Camera3D camera = new();
     private readonly Label hud = new();
+    private readonly ColorRect hudBack = new() { Color = new Color(.03f, .04f, .06f, .9f), Size = new Vector2(960, 100), MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Dictionary<string, Node3D> actors = new();
     private bool roomBuilt;
     private readonly Dictionary<string, (MeshInstance3D Box, Label3D Label)> supplies = new();
@@ -31,7 +32,7 @@ public partial class RoomView : Node3D
         AddChild(camera); camera.Current = true; camera.Fov = 75;
         camera.Position = new Vector3(-8, 6, 0); camera.LookAt(new Vector3(0, 1, 0));
         var layer = new CanvasLayer(); AddChild(layer);
-        layer.AddChild(new ColorRect { Color = new Color(.03f, .04f, .06f, .9f), Size = new Vector2(960, 100), MouseFilter = Control.MouseFilterEnum.Ignore });
+        layer.AddChild(hudBack);
         hud.Position = new Vector2(12, 8); hud.AddThemeFontSizeOverride("font_size", 17); layer.AddChild(hud);
     }
     private static MeshInstance3D Box(Node3D parent, Vector3 p, Vector3 size, Color color)
@@ -102,6 +103,24 @@ public partial class RoomView : Node3D
         return node;
     }
 
+    private readonly Dictionary<int, Node3D> caches = new();
+    private static string Condition(WorldSnapshot? state, string ownId) =>
+        state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Condition is { Length: > 0 } c ? $" ({c})" : "";
+
+    private void UpdateCaches(WorldSnapshot state)
+    {
+        var present = (state.Caches ?? []).ToDictionary(k => k.Id);
+        foreach (var id in caches.Keys.Except(present.Keys).ToArray()) { caches[id].QueueFree(); caches.Remove(id); }
+        foreach (var (id, cache) in present.Where(p => !caches.ContainsKey(p.Key)))
+        {
+            var node = new Node3D { Position = new Vector3((float)cache.X, 0, (float)cache.Z) };
+            AddChild(node);
+            Box(node, new Vector3(0, .25f, 0), new Vector3(.7f, .5f, .5f), new Color(.45f, .3f, .15f));
+            node.AddChild(new Label3D { Text = cache.Label, Position = new Vector3(0, .9f, 0), Billboard = BaseMaterial3D.BillboardModeEnum.Enabled, FontSize = 32, PixelSize = .005f });
+            caches[id] = node;
+        }
+    }
+
     private Node3D CreateActor(ActorState state, bool local)
     {
         var actor = new Node3D { Position = new Vector3((float)state.X, 0, (float)state.Z) };
@@ -138,10 +157,13 @@ public partial class RoomView : Node3D
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
             "WASD move | Q/E turn | Up/Down tilt | C/R camera | F take | B build | T retry | V melee | G shoot\n" +
             $"Present: {state?.Actors.Length ?? 0} | World time: {(state?.Tick ?? 0) / (double)WorldAuthority.TickRate:0.0}s\n" +
-            $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
-            $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}";
+            $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
+            $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}" +
+            string.Concat((state?.Opportunities ?? []).Take(3).Select(o => $"\n• {o.Text}"));
+        hudBack.Size = new Vector2(960, 100 + 22 * Math.Min(3, state?.Opportunities?.Length ?? 0));
         if (state is null) return;
         if (!roomBuilt) BuildRoom(state);
+        UpdateCaches(state);
         // Blocks only appear (no demolition yet); draw any the server added since the last snapshot.
         foreach (var block in state.Blocks.Where(b => blocks.Add(b.Id)))
             Box(this, new Vector3((float)block.X, (float)block.Height / 2, (float)block.Z),

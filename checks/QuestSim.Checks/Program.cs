@@ -40,3 +40,4 @@ PickupChecks.Run(Check);
 BuildChecks.Run(Check);
 CityChecks.Run(Check);
 LivingChecks.Run(Check);
+DefeatChecks.Run(Check);

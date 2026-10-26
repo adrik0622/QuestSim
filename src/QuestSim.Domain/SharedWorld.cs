@@ -5,13 +5,47 @@ using System.Text.Json.Nodes;
 namespace QuestSim.Domain;
 
 public sealed record BlockRecord(string Id, double X, double Z, double Width, double Depth, double Height);
-public sealed record ActorState(string Id, string Name, double X, double Z, double Heading, int Kind = 0, int Faction = -1, int Health = 100);
+public sealed record ActorState(string Id, string Name, double X, double Z, double Heading, int Kind = 0, int Faction = -1, int Health = 100, string Condition = "");
 public sealed record AgentDelta(uint Index, int Health, bool Dead);
+// Facts are append-only with provenance; holders are "actor:...", "npc:N", "cache:N" or the story source "vgm".
+public sealed record Fact(int Id, long Tick, string Kind, string Subject, string Object, double X, double Z, string Provenance);
+public sealed record ItemTransfer(long Tick, string From, string To, string ItemId, int Quantity, string Reason);
+public sealed class Opportunity
+{
+    public int Id { get; set; }
+    public string Kind { get; set; } = "";          // rescue, revenge, cure
+    public string Subject { get; set; } = "";       // the player it concerns
+    public string Target { get; set; } = "";        // npc:N, actor:..., or cache:N
+    public string RewardItem { get; set; } = "";
+    public int RewardQuantity { get; set; }
+    public string Status { get; set; } = "open";    // open, claimed, expired
+    public string ClaimedBy { get; set; } = "";
+    public long CreatedTick { get; set; }
+    public string Text { get; set; } = "";
+}
+public sealed class NamedNpc
+{
+    public uint Index { get; set; }
+    public string Title { get; set; } = "";
+    public int BonusHealth { get; set; }
+    public int BonusDamage { get; set; }
+    public int Victories { get; set; }
+    public Dictionary<string, int> Inventory { get; set; } = new();
+}
+public sealed class LootCache
+{
+    public int Id { get; set; }
+    public double X { get; set; }
+    public double Z { get; set; }
+    public string Label { get; set; } = "";
+    public Dictionary<string, int> Inventory { get; set; } = new();
+}
 public sealed record AttackResult(string Kind, bool Fired, string TargetId, int Damage, bool Killed, string Reason);
 public sealed record SupplyState(string Id, string ItemId, double X, double Z, int Count);
 public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
 public sealed record BuildReceipt(string RequestId, string ActorId, string SiteId, bool Success, string Reason, int Cost);
-public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies, ulong WorldSeed);
+public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies, ulong WorldSeed,
+    Opportunity[]? Opportunities = null, LootCache[]? Caches = null);
 
 public sealed class CharacterRecord
 {
@@ -28,6 +62,9 @@ public sealed class CharacterRecord
     public const string Health = "questsim:health", Strength = "questsim:strength", Agility = "questsim:agility", Perception = "questsim:perception";
     public static readonly Dictionary<string, int> DefaultStats = new() { [Health] = 100, [Strength] = 10, [Agility] = 10, [Perception] = 10 };
     public int Stat(string id) => Stats.TryGetValue(id, out int v) ? v : DefaultStats.GetValueOrDefault(id);
+    // Timed conditions in remaining *online* ticks (absent players are protected): injured, infected, captive.
+    public Dictionary<string, long> Conditions { get; set; } = new();
+    public string Status { get; set; } = "alive";   // alive, turned, dead (permadeath); retired characters keep their record
 }
 
 public sealed class WorldSave
@@ -50,6 +87,13 @@ public sealed class WorldSave
     public int Population { get; set; }                        // coarse agents regenerated from WorldSeed; 0 = none
     public List<AgentDelta> AgentDeltas { get; set; } = new();  // stored differences from the generated population
     public Dictionary<string, int> StartingKit { get; set; } = new();
+    public bool Permadeath { get; set; }
+    public List<Fact> Facts { get; set; } = new();
+    public List<ItemTransfer> Transfers { get; set; } = new();
+    public List<Opportunity> Opportunities { get; set; } = new();
+    public List<NamedNpc> Named { get; set; } = new();
+    public List<LootCache> Caches { get; set; } = new();
+    public Dictionary<int, int> Standing { get; set; } = new();   // faction -> attitude toward players, -100..100
     [JsonRequired] public List<SupplyState> Supplies { get; set; } = InitialSupplies.ToList();
     [JsonRequired] public List<PickupReceipt> Receipts { get; set; } = new();
     [JsonRequired] public List<BuildReceipt> BuildReceipts { get; set; } = new();
@@ -199,7 +243,7 @@ public sealed partial class WorldAuthority
         StepLiving();
         foreach (var (peer, c) in active)
         {
-            if (!intents.TryGetValue(peer, out var intent) || intent.Expires < State.Tick) continue;
+            if (!intents.TryGetValue(peer, out var intent) || intent.Expires < State.Tick || IsCaptive(c)) continue;
             c.Heading = intent.Heading;
             double dx = intent.X * Speed / TickRate, dz = intent.Z * Speed / TickRate;
             if (IsSafe(c.X + dx, c.Z, c.Id)) c.X += dx;
@@ -243,9 +287,11 @@ public sealed partial class WorldAuthority
     public WorldSnapshot Snapshot(int? peer = null)
     {
         var viewer = peer is int p && active.TryGetValue(p, out var c) ? c : null;
-        var actors = active.Values.OrderBy(a => a.Id).Select(a => new ActorState(a.Id, a.Name, a.X, a.Z, a.Heading, 0, -1, a.Stat(CharacterRecord.Health)))
+        var actors = active.Values.OrderBy(a => a.Id).Select(a => new ActorState(a.Id, a.Name, a.X, a.Z, a.Heading, 0, -1, a.Stat(CharacterRecord.Health),
+                IsCaptive(a) ? "captive" : a.Conditions.ContainsKey(Infected) ? "infected" : a.Conditions.ContainsKey(Injured) ? "injured" : ""))
             .Concat(NpcsVisibleTo(viewer, peer is null)).ToArray();
-        return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed);
+        return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed,
+            State.Opportunities.Where(o => o.Status == "open").ToArray(), State.Caches.Where(k => k.Inventory.Count > 0).ToArray());
     }
 }
 
@@ -353,9 +399,21 @@ public static class WorldStorage
         if (w.Supplies.Zip(WorldSave.InitialSupplies).Any(p => w.Receipts.Count(r => r.Success && r.ContainerId == p.First.Id) != p.Second.Count - p.First.Count) ||
             w.Characters.Any(c => items.Any(item => c.Inventory.GetValueOrDefault(item) <
                 w.Receipts.Count(r => r.Success && r.ActorId == c.Id && r.ItemId == item) -
-                (item == WorldSave.Panel ? w.BuildReceipts.Count(r => r.Success && r.ActorId == c.Id) : 0))) ||
-            w.Characters.Sum(c => (long)c.Inventory.GetValueOrDefault(WorldSave.Panel)) != w.Receipts.Count(r => r.Success && r.ItemId == WorldSave.Panel) - placed ||
+                (item == WorldSave.Panel ? w.BuildReceipts.Count(r => r.Success && r.ActorId == c.Id) : 0) + Net(c.Id, item))) ||
+            w.Characters.Sum(c => (long)c.Inventory.GetValueOrDefault(WorldSave.Panel)) + w.Named.Sum(n => (long)n.Inventory.GetValueOrDefault(WorldSave.Panel)) +
+                w.Caches.Sum(k => (long)k.Inventory.GetValueOrDefault(WorldSave.Panel)) != w.Receipts.Count(r => r.Success && r.ItemId == WorldSave.Panel) - placed ||
+            w.Named.Any(n => !Ledgered($"npc:{n.Index}", n.Inventory)) || w.Caches.Any(k => !Ledgered($"cache:{k.Id}", k.Inventory)) ||
             placed != w.Blocks.Count(b => b.Id == WorldSave.BuildSite.Id) || (placed == 1 && w.Blocks.Single(b => b.Id == WorldSave.BuildSite.Id) != WorldSave.BuildSite))
             throw new InvalidDataException("Supplies, inventories, walls and receipts disagree");
+        if (w.Facts.Select((f, i) => f.Id != i).Any(x => x) || w.Opportunities.Select(o => o.Id).Distinct().Count() != w.Opportunities.Count ||
+            w.Named.Select(n => n.Index).Distinct().Count() != w.Named.Count || w.Caches.Select(k => k.Id).Distinct().Count() != w.Caches.Count ||
+            w.Opportunities.Any(o => o.Status is not ("open" or "claimed" or "expired") || (o.Status == "claimed") != (o.ClaimedBy.Length > 0)) ||
+            w.Characters.Any(c => c.Conditions is null || c.Status is not ("alive" or "turned" or "dead")))
+            throw new InvalidDataException("Invalid facts, opportunities or character conditions");
+        int Net(string holder, string item) => w.Transfers.Where(t => t.ItemId == item).Sum(t => (t.To == holder ? t.Quantity : 0) - (t.From == holder ? t.Quantity : 0));
+        // Named NPCs and caches only ever change through ledgered transfers.
+        bool Ledgered(string holder, Dictionary<string, int> inventory) =>
+            w.Transfers.Where(t => t.To == holder || t.From == holder).Select(t => t.ItemId).Concat(inventory.Keys).Distinct()
+                .All(item => inventory.GetValueOrDefault(item) == Net(holder, item));
     }
 }

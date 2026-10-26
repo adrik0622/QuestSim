@@ -36,8 +36,9 @@ public sealed partial class WorldAuthority
     void StepLiving()
     {
         foreach (var key in attackCooldown.Keys.ToArray()) if (--attackCooldown[key] <= 0) attackCooldown.Remove(key);
+        StepConditions();
         StepNpcs();
-        if (Pop is not null && State.Tick % PopulationEvery == 0) StepPopulation();
+        if (Pop is not null && State.Tick % PopulationEvery == 0) { StepPopulation(); RefreshOpportunities(); }
     }
 
     // The coarse tick runs on a background task; tiers change only while it is idle.
@@ -79,7 +80,7 @@ public sealed partial class WorldAuthority
                 npcs[i] = new Npc
                 {
                     Index = i, Zombie = Population.IsZombie(pop.Info[i]), Faction = Population.FactionOf(pop.Info[i]), Name = pop.NameOf(i),
-                    X = x, Z = z, Health = delta?.Health ?? pop.BaseHealth(i)
+                    X = x, Z = z, Health = delta?.Health ?? pop.BaseHealth(i) + (State.Named.FirstOrDefault(n => n.Index == i)?.BonusHealth ?? 0)
                 };
                 pop.Info[i] |= Population.Detailed;
             }
@@ -128,14 +129,14 @@ public sealed partial class WorldAuthority
             if (npc.Hostile)
             {
                 double sight = npc.Zombie ? 18 : 25;
-                prey = players.Where(p => Distance(p.X, p.Z, npc.X, npc.Z) <= sight).OrderBy(p => Distance(p.X, p.Z, npc.X, npc.Z)).ThenBy(p => p.Id).FirstOrDefault();
+                prey = players.Where(p => !IsCaptive(p) && Distance(p.X, p.Z, npc.X, npc.Z) <= sight).OrderBy(p => Distance(p.X, p.Z, npc.X, npc.Z)).ThenBy(p => p.Id).FirstOrDefault();
             }
             if (prey is not null)
             {
                 double d = Distance(prey.X, prey.Z, npc.X, npc.Z);
                 if (d <= 1.1)
                 {
-                    if (npc.Cooldown == 0) { npc.Cooldown = 24; DamagePlayer(prey, npc.Zombie ? 10 : 8, npc); }
+                    if (npc.Cooldown == 0) { npc.Cooldown = 24; DamagePlayer(prey, (npc.Zombie ? 10 : 8) + (State.Named.FirstOrDefault(n => n.Index == npc.Index)?.BonusDamage ?? 0), npc); }
                 }
                 else MoveNpc(npc, prey.X, prey.Z, npc.Zombie ? 1.6 : 2.1);
                 continue;
@@ -169,22 +170,20 @@ public sealed partial class WorldAuthority
         player.Stats[CharacterRecord.Health] = health;
         if (health > 0) return;
         if (Downed is not null) { Downed(player, attacker); return; }
-        // Placeholder until defeat outcomes exist: wake in the starter room.
-        var safe = FindSafe(-3, 0, player.Id);
-        player.X = safe.X; player.Z = safe.Z;
-        player.Stats[CharacterRecord.Health] = CharacterRecord.DefaultStats[CharacterRecord.Health];
+        Defeat(player, attacker);
     }
 
     IEnumerable<ActorState> NpcsVisibleTo(CharacterRecord? viewer, bool all) =>
         npcs.Values.Where(n => !n.Dead && (all || viewer is not null && Distance(viewer.X, viewer.Z, n.X, n.Z) <= ViewRadius))
             .OrderBy(n => n.Index)
-            .Select(n => new ActorState($"npc:{n.Index}", n.Name, n.X, n.Z, n.Heading, n.Zombie ? 2 : 1, n.Faction, n.Health));
+            .Select(n => new ActorState($"npc:{n.Index}", DisplayName(n), n.X, n.Z, n.Heading, n.Zombie ? 2 : 1, n.Faction, n.Health));
 
     // Melee hits the nearest living NPC in a 120° arc within reach; the pistol is a hitscan ray stopped by walls.
     public AttackResult Attack(int peer, string kind)
     {
         var c = CharacterFor(peer);
         if (kind is not ("melee" or "shoot")) throw new ArgumentException("Unknown attack");
+        if (IsCaptive(c)) return new(kind, false, "", 0, false, "captive");
         if (attackCooldown.ContainsKey(c.Id)) return new(kind, false, "", 0, false, "cooldown");
         double fx = -Math.Sin(c.Heading), fz = -Math.Cos(c.Heading);
         Npc? target;
@@ -195,7 +194,7 @@ public sealed partial class WorldAuthority
             target = npcs.Values.Where(n => !n.Dead && Distance(c.X, c.Z, n.X, n.Z) <= MeleeReach &&
                     ((n.X - c.X) * fx + (n.Z - c.Z) * fz) >= .5 * Distance(c.X, c.Z, n.X, n.Z))
                 .OrderBy(n => Distance(c.X, c.Z, n.X, n.Z)).ThenBy(n => n.Index).FirstOrDefault();
-            damage = 12 + c.Stat(CharacterRecord.Strength);
+            damage = 12 + c.Stat(CharacterRecord.Strength) - (c.Conditions.ContainsKey(Injured) ? 4 : 0);
         }
         else
         {
@@ -219,6 +218,7 @@ public sealed partial class WorldAuthority
         target.Health = Math.Max(0, target.Health - damage);
         target.Dead = target.Health == 0;
         RecordDelta(target.Index, target.Health, target.Dead);
+        if (target.Dead) OnKilled(c, target);
         return new(kind, kind == "shoot", $"npc:{target.Index}", damage, target.Dead, target.Dead ? "killed" : "hit");
     }
 
