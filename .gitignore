@@ -1,0 +1,7 @@
+.artifacts/
+.tools/
+.local/
+**/bin/
+**/obj/
+**/.godot/
+**/__pycache__/
