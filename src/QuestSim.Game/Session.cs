@@ -97,6 +97,8 @@ public partial class Session : Node
                     save.StartingKit = new() { [WorldAuthority.Pistol] = 1, [WorldAuthority.Ammo] = 24 };
                     foreach (var (item, amount) in content.StartingKit) save.StartingKit[item] = save.StartingKit.GetValueOrDefault(item) + amount;
                 }
+                // Opt-in: give an existing world (e.g. a migrated pre-city save) a living population.
+                if (save.Population == 0 && Option("populate").Length > 0) save.Population = int.Parse(Option("populate"));
                 content.Require(save.Mods);   // refuse to run a world without a mod it was made with
                 save.Mods = save.Mods.Concat(content.Mods.Where(m => save.Mods.All(r => r.Id != m.Id))).ToList();
                 GD.Print("CONTENT mods=" + string.Join(",", content.Mods.Select(m => $"{m.Id}@{m.Version}")) + $" items={content.Items.Count}");
