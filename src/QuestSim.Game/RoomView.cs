@@ -191,6 +191,11 @@ public partial class RoomView : Node3D
     public void UpdateCrowd(CrowdWire.Figure[] figures)
     {
         crowdFigures = figures;
+        // Updates come once per coarse tick: once a second at 1x, several times a second when an admin speeds the world up.
+        // Velocities are metres per coarse tick, so placeholders walk at the observed tick rate, not slow motion between snaps.
+        ulong now = Time.GetTicksMsec();
+        if (crowdArrived > 0) crowdInterval = Math.Clamp(crowdInterval + ((now - crowdArrived) / 1000.0 - crowdInterval) * .3, .05, 2);
+        crowdArrived = now;
         crowdAge = 0;
         if (crowd is null)
         {
@@ -206,6 +211,8 @@ public partial class RoomView : Node3D
         foreach (var gone in crowdShown.Keys.Where(k => !keep.Contains(k)).ToArray()) crowdShown.Remove(gone);
     }
 
+    private ulong crowdArrived;
+    private double crowdInterval = 1;
     private void DrawCrowd(double delta)
     {
         if (crowd is null) return;
@@ -214,7 +221,7 @@ public partial class RoomView : Node3D
         var multi = crowd.Multimesh;
         multi.InstanceCount = shown.Length;
         crowdAge += delta;
-        float blend = 1 - Mathf.Exp(-8 * (float)delta), age = (float)Math.Min(crowdAge, 1.5);
+        float blend = 1 - Mathf.Exp(-8 * (float)delta), age = (float)(Math.Min(crowdAge, 1.5 * crowdInterval) / crowdInterval);
         for (int i = 0; i < shown.Length; i++)
         {
             var f = shown[i];
