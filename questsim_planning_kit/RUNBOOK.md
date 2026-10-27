@@ -132,7 +132,9 @@ are not saved: a restarted server is back to 1x and paused when empty (`--always
 starts it running).
 
 Measured speeds held (Linux 5950X, one player, detail budget 600): 1M agents 5.6x (the
-coarse population step is the limit; the server stays at 60 fps), 100k agents 16x.
+coarse population step is the limit; the server stays at 60 fps), 100k agents 16x;
+whitetop (Ryzen 5 2600): 1M agents 2.5x, 100k agents 16x. For fast playtests, a fresh
+100k world: `bash scripts/run_server.sh --save=.artifacts/play/fast.json --population=100000`.
 
 World save format **1**, content ID `questsim:q01-room-v1`, wire protocol **1**:
 no earlier game save/wire format existed. Required fields and version/content are

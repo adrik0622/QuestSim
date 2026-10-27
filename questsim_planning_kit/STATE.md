@@ -127,8 +127,13 @@ full NPCs is now bucketed in 6.5 m cells (2.65 -> 1.88 ms a step with 600 NPCs);
 and facts over 3,000 fight-heavy steps (175 clashes) against the old scan.
 Speeds held on Linux (5950X, 1 player, budget 600): 1M agents 5.6x at 60 fps (limit: the coarse
 population step competing with the main thread), 100k agents 16x.
+whitetop (Ryzen 5 2600): 1M agents 2.5x at 41-60 fps, 100k agents 16x.
 Linux: test_all (default) green: 167 domain checks, items 12, build 11, multiplayer 12, save-failures 4,
 defeat 3, content 2, console 5, living 6, build-screen 6 (incl. the grave key), city-screen 2, E1 12.
+whitetop at 2f86cb9: test_all --quick green (167 domain checks, items 12, build 11 three runs,
+multiplayer 12, save-failures 4, defeat 3, content 2, console 5) after one Windows-only test race was
+fixed: verify_build/verify_items polled the profile while the client replaced it (PermissionError);
+they now use the tolerant read(). Not run there: Xvfb screens (no Xvfb), a graphical console.
 
 Handoff for the next session: HANDOFF_2026-10-26.md (state, machines, lessons, road to v1.0).
 
