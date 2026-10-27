@@ -122,7 +122,7 @@ def run_recovery(fail_save):
             obstruction.rmdir()
             print('PASS failed server save never acknowledges a wall or spends the saved panel',flush=True)
         else:
-            wait(lambda: json.loads((f.profiles/'alice.json').read_text()).get('LastBuildRequestId')==request,'pending build durable')
+            wait(lambda: (read(f.profiles/'alice.json') or {}).get('LastBuildRequestId')==request,'pending build durable')
             time.sleep(.2)
             pause(f.processes['alice'][0])
             pause(f.processes['server'][0], resume=True)

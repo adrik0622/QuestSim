@@ -113,7 +113,7 @@ def run_recovery(fail_save):
             pause(f.processes['server'][0])
         f.command('alice',pickupRequestId=request,containerId=CRATE)
         if not fail_save:
-            wait(lambda: json.loads((f.profiles/'alice.json').read_text()).get('LastPickupRequestId')==request, 'pending request durable')
+            wait(lambda: (read(f.profiles/'alice.json') or {}).get('LastPickupRequestId')==request, 'pending request durable')
             time.sleep(.2)  # Let the client flush the reliable packet while server is stopped.
             pause(f.processes['alice'][0])
             pause(f.processes['server'][0], resume=True)
