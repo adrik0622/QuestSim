@@ -119,6 +119,21 @@ co-op identity, not authenticated accounts. Copying an active identity is reject
 there is no account ownership protection against impersonation after logout.
 No credentials or actual play saves are committed.
 
+### Debug console, world speed and always-on (2026-10-26)
+
+The grave/tilde key (`` ` ``) opens the console; Enter runs a line, `` ` `` or Esc closes it.
+The server runs every line with the sender's rights. Everyone may run `help`, `time` and
+`who`, and see the current `speed`/`alwayson`; changing them (`speed <1|2|4|8|16>`,
+`alwayson <on|off>`) needs admin rights. **Nobody is admin
+until the host lists them**: put character IDs (from `who`), one per line, in
+`<save>.admins` next to the world, e.g. `.artifacts/play/world.json.admins` (`#` starts a
+comment). It is re-read on every command, so no restart is needed. Speed and always-on
+are not saved: a restarted server is back to 1x and paused when empty (`--always-on`
+starts it running).
+
+Measured speeds held (Linux 5950X, one player, detail budget 600): 1M agents 5.6x (the
+coarse population step is the limit; the server stays at 60 fps), 100k agents 16x.
+
 World save format **1**, content ID `questsim:q01-room-v1`, wire protocol **1**:
 no earlier game save/wire format existed. Required fields and version/content are
 validated; unsupported/incomplete saves fail without reset/overwrite. Saves contain

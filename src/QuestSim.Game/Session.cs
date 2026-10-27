@@ -37,6 +37,7 @@ public partial class Session : Node
     private string lastInteract = "";
     private AskResult? lastAsk;
     private string lastInspect = "";
+    private readonly List<string> consoleLines = new();
     private string itemMessage = "F takes from the nearest crate; B builds a panel wall; T retries your last attempt.";
     private static string Workspace => Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../.."));
     private string Option(string key, string fallback = "") => options.GetValueOrDefault(key, fallback);
@@ -65,6 +66,7 @@ public partial class Session : Node
         public bool Ask { get; set; }
         public bool Use { get; set; }
         public bool Inspect { get; set; }
+        public string Console { get; set; } = "";
     }
 
     public override void _Ready()
@@ -107,7 +109,7 @@ public partial class Session : Node
                 content.Require(save.Mods);   // refuse to run a world without a mod it was made with
                 save.Mods = save.Mods.Concat(content.Mods.Where(m => save.Mods.All(r => r.Id != m.Id))).ToList();
                 GD.Print("CONTENT mods=" + string.Join(",", content.Mods.Select(m => $"{m.Id}@{m.Version}")) + $" items={content.Items.Count}");
-                authority = new WorldAuthority(save) { Content = content, DetailBudget = int.Parse(Option("detail-budget", "600")) };
+                authority = new WorldAuthority(save) { Content = content, DetailBudget = int.Parse(Option("detail-budget", "600")), AlwaysOn = options.ContainsKey("always-on") };
                 authority.LoadPopulation(savePath);
                 populationSaveSeconds = double.Parse(Option("population-save-seconds", "60"), System.Globalization.CultureInfo.InvariantCulture);
                 GD.Print($"POPULATION agents={save.Population} load={authority.PopulationLoad}");
@@ -156,6 +158,7 @@ public partial class Session : Node
                     view.AskRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestAsk)); };
                     view.UseRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestUse), ""); };
                     view.InspectRequested += () => { if (connected && own is not null) RpcId(1, nameof(RequestInspect)); };
+                    view.ConsoleSubmitted += SendConsole;
                     view.RetryRequested += () => { if (profile.LastAction == "build") RequestBuild(true); else RequestPickup(true); };
                 }
             }
@@ -422,6 +425,38 @@ public partial class Session : Node
         view?.ShowInspection(text);
     }
 
+    private void SendConsole(string text)
+    {
+        if (connected && own is not null && text.Trim().Length > 0) RpcId(1, nameof(RequestConsole), text);
+    }
+
+    // Debug console: the server runs the line with the sender's rights; admins come fresh from <save>.admins every time.
+    [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void RequestConsole(string text)
+    {
+        if (!server || authority is null || failed) return;
+        int peer = Multiplayer.GetRemoteSenderId();
+        try
+        {
+            HashSet<string> admins;
+            try { admins = WorldAuthority.ReadAdmins(savePath + ".admins"); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { admins = []; GD.Print("ADMINS_UNREADABLE ", e.Message); }
+            var lines = authority.RunCommand(peer, text, admins);
+            GD.Print($"CONSOLE actor={authority.CharacterFor(peer).Id} command={text.Trim()} reply={lines.FirstOrDefault()}");
+            RpcId(peer, nameof(ConsoleReply), string.Join("\n", lines));
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException) { GD.Print("CONSOLE_REJECTED ", e.Message); }
+    }
+
+    [Rpc(TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
+    public void ConsoleReply(string text)
+    {
+        if (server) return;
+        var lines = text.Length == 0 ? [] : text.Split('\n');
+        consoleLines.AddRange(lines);
+        view?.ShowConsoleLines(lines);
+    }
+
     [Rpc(MultiplayerApi.RpcMode.AnyPeer, TransferMode = MultiplayerPeer.TransferModeEnum.Reliable)]
     public void RequestAsk()
     {
@@ -615,7 +650,7 @@ public partial class Session : Node
             if (shutdownRequested || (shutdownPath.Length > 0 && File.Exists(shutdownPath))) { GetTree().Quit(); return; }
             if (server)
             {
-                authority!.Step();
+                authority!.StepFrame();
                 foreach (var (peer, reason) in authority.PendingKicks)
                 {
                     WorldStorage.Save(savePath, authority.State);
@@ -626,11 +661,12 @@ public partial class Session : Node
                 if (frame % 2 == 0) Publish();
                 SavePopulationInBackground(delta);
                 saveElapsed += delta;
-                if (saveElapsed >= 2 && authority.ActiveCount > 0) { WorldStorage.Save(savePath, authority.State); saveElapsed = 0; }
+                if (saveElapsed >= 2 && (authority.ActiveCount > 0 || authority.AlwaysOn)) { WorldStorage.Save(savePath, authority.State); saveElapsed = 0; }
             }
             else if (connected && own is not null)
             {
                 if (intentPath.Length > 0) ReadTestIntent();
+                else if (view?.ConsoleOpen == true) desiredX = desiredZ = 0;   // typing, not walking
                 else
                 {
                     Vector2 input = new((Input.IsPhysicalKeyPressed(Key.D) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.A) ? 1 : 0),
@@ -670,7 +706,7 @@ public partial class Session : Node
             string path = savePath;
             populationWrite = Task.Run(() => (WorldAuthority.WritePopulationFile(path, tick, bytes), WorldAuthority.Hash(bytes)));
         }
-        else if (populationWrite is null && populationElapsed >= populationSaveSeconds && authority.ActiveCount > 0)
+        else if (populationWrite is null && populationElapsed >= populationSaveSeconds && (authority.ActiveCount > 0 || authority.AlwaysOn))
         {
             authority.PopulationSaveRequested = true;
             populationElapsed = 0;
@@ -694,6 +730,7 @@ public partial class Session : Node
         if (command.Ask) RpcId(1, nameof(RequestAsk));
         if (command.Use) RpcId(1, nameof(RequestUse), "");
         if (command.Inspect) RpcId(1, nameof(RequestInspect));
+        if (command.Console.Length > 0) SendConsole(command.Console);
         if (command.BuildRequestId.Length > 0 || command.RetryBuild)
             RequestBuild(command.RetryBuild, command.BuildRequestId, command.SiteId);
         // Real key events through Godot's input pipeline; only graphical clients have a view to receive them.
@@ -728,7 +765,8 @@ public partial class Session : Node
             role = server ? "server" : "client", display = DisplayServer.GetName(), connection, profile = profileName,
             ownId = own?.Id, own, active = authority?.ActiveCount ?? snapshot?.Actors.Length ?? 0,
             tick = authority?.State.Tick ?? snapshot?.Tick ?? 0, snapshot,
-            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk, lastInspect,
+            characters = authority?.State.Characters, receipts = authority?.State.Receipts, buildReceipts = authority?.State.BuildReceipts, lastPickup, lastBuild, lastAttack, lastInteract, lastAsk, lastInspect, consoleLines, consoleOpen = view?.ConsoleOpen,
+            worldSpeed = authority?.WorldSpeed ?? snapshot?.WorldSpeed, heldSpeed = authority?.HeldSpeed, alwaysOn = authority?.AlwaysOn,
             opportunities = authority?.State.Opportunities, facts = authority?.State.Facts.Count,
             npcs = authority?.Npcs.Count, detailSwaps = authority?.DetailSwaps, populationLagged = authority?.PopulationLagged, agentDeltas = authority?.State.AgentDeltas.Count,
             actorPacketBytes, worldBytes, crowdCount, crowdBytes, populationLoad = authority?.PopulationLoad, populationTick = authority?.Pop?.Tick, populationFile = authority?.State.PopulationFile, itemMessage, fps = Engine.GetFramesPerSecond(),

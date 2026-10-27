@@ -196,6 +196,23 @@ public sealed partial class WorldAuthority
     void StepNpcs()
     {
         var players = active.Values.ToArray();
+        // Rivals within 6 m, found through 6.5 m cells of where everyone stood at the start of the step: nobody moves more
+        // than 0.11 m a step, so the 3 x 3 cells around an NPC hold every rival in reach (same result as scanning everyone).
+        const double Cell = 6.5;
+        var cells = new Dictionary<(long, long), List<Npc>>();
+        foreach (var n in npcs.Values.Where(n => !n.Dead))
+        {
+            var key = ((long)Math.Floor(n.X / Cell), (long)Math.Floor(n.Z / Cell));
+            if (!cells.TryGetValue(key, out var list)) cells[key] = list = new();
+            list.Add(n);
+        }
+        IEnumerable<Npc> Around(Npc npc)
+        {
+            long cx = (long)Math.Floor(npc.X / Cell), cz = (long)Math.Floor(npc.Z / Cell);
+            for (long dx = -1; dx <= 1; dx++)
+                for (long dz = -1; dz <= 1; dz++)
+                    if (cells.TryGetValue((cx + dx, cz + dz), out var list)) foreach (var n in list) yield return n;
+        }
         foreach (var npc in npcs.Values)
         {
             if (npc.Dead) continue;
@@ -209,7 +226,7 @@ public sealed partial class WorldAuthority
             if (prey is null && !npc.Dead)
             {
                 // Factions act on each other: zombies and humans fight, the Choir fights everyone, rival hordes clash.
-                var rival = npcs.Values.Where(r => !r.Dead && r != npc && Enemies(npc, r) && Distance(r.X, r.Z, npc.X, npc.Z) <= 6)
+                var rival = Around(npc).Where(r => !r.Dead && r != npc && Enemies(npc, r) && Distance(r.X, r.Z, npc.X, npc.Z) <= 6)
                     .OrderBy(r => Distance(r.X, r.Z, npc.X, npc.Z)).ThenBy(r => r.Index).FirstOrDefault();
                 if (rival is not null)
                 {

@@ -45,6 +45,7 @@ step multiplayer "$py" scripts/verify_multiplayer.py
 step save-failures "$py" scripts/verify_save_failures.py
 step defeat "$py" scripts/verify_defeat.py
 step content "$py" scripts/verify_content.py
+step console "$py" scripts/verify_console.py
 
 if [ "$mode" != "--quick" ]; then
   step living capped 12G "$py" scripts/verify_living.py

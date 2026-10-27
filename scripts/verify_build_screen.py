@@ -94,6 +94,17 @@ try:
     f.command('alice'); time.sleep(.4)
     capture('alice', 'city-outside')
     passed('a player can leave the starter room through its door and see the generated city')
+    # Debug console: the grave key opens it, game keys are ignored while it is open, and it closes again.
+    replies_before = replies('bob', 'ITEM_REPLY')
+    press('bob', 'Quoteleft')
+    wait(lambda: f.status('bob')['consoleOpen'] is True, 'grave key opens the console')
+    press('bob', 'F'); f.command('bob', console='help')
+    wait(lambda: any(l.startswith('time') for l in f.status('bob')['consoleLines']), 'help reply')
+    capture('bob', 'console-open')
+    assert replies('bob', 'ITEM_REPLY') == replies_before
+    press('bob', 'Quoteleft')
+    wait(lambda: f.status('bob')['consoleOpen'] is False, 'grave key closes the console')
+    passed('the grave key opens and closes the debug console; F does nothing while it is open; help answers')
     for label in ['alice', 'bob']: f.close(label)
     wait(lambda: f.status('server')['active'] == 0, 'clients absent')
     f.close('server', server=True)

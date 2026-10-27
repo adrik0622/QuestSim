@@ -114,8 +114,25 @@ KiB/s after moving the settlement table out of the world JSON (it had cost ~24 K
 both 20 ticks/s with no lag on Linux and on whitetop (Ryzen 5 2600). At 600 everyone near the
 plaza is a full NPC. Director chose 600 as the default (2026-10-26).
 
+2026-10-26 (debug console, world speed, always-on; CURRENT_TASK.md): the grave key opens a
+console whose lines the server runs with the sender's rights. Commands: help, time, who, speed
+<1|2|4|8|16>, alwayson <on|off>; changing speed or always-on needs admin. Admins are character IDs
+in `<save>.admins` (no file = no admins), re-read per command. The server steps the world
+WorldSpeed times per frame within a 35 ms budget and waits for a running coarse tick instead of
+skipping it above 1x (1x behaviour unchanged). Always-on (`--always-on` or the command) keeps time
+and autosaves running with nobody connected; not saved across restarts. Protocol 8 -> 9 (console
+RPCs, speed in the world snapshot); no save change. Found while measuring: an overrun frame made
+Godot run catch-up physics frames (server fps 2 at 8x); the budget fixes it. Rival search among
+full NPCs is now bucketed in 6.5 m cells (2.65 -> 1.88 ms a step with 600 NPCs); identical state
+and facts over 3,000 fight-heavy steps (175 clashes) against the old scan.
+Speeds held on Linux (5950X, 1 player, budget 600): 1M agents 5.6x at 60 fps (limit: the coarse
+population step competing with the main thread), 100k agents 16x.
+Linux: test_all (default) green: 167 domain checks, items 12, build 11, multiplayer 12, save-failures 4,
+defeat 3, content 2, console 5, living 6, build-screen 6 (incl. the grave key), city-screen 2, E1 12.
+
 Handoff for the next session: HANDOFF_2026-10-26.md (state, machines, lessons, road to v1.0).
 
-Next action: director playtest of F19/F19b/F20 (M map, rumors such as "A great horde is
-moving on ...", faction news), or F21 (caravans and raid parties as travelling groups players
-can meet). Tuning knobs are constants at the top of Economy.cs and Politics.cs.
+Next action: director playtest of F19/F19b/F20 at speed (add your character ID to
+`.artifacts/play/world.json.admins`, then `speed 4` or `speed 8`), then NPC navigation (grid + A*,
+DIRECTOR.md 2026-10-26) or F21 as the director chooses. Tuning knobs are constants at the top of
+Economy.cs and Politics.cs.

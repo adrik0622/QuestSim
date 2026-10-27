@@ -53,6 +53,7 @@ python3 scripts/verify_items.py              # Q02a item ENet/recovery/migration
 python3 scripts/verify_multiplayer.py        # Q01 network regressions
 python3 scripts/verify_living.py / verify_defeat.py / verify_content.py   # nightly living world, defeat, mods
 python3 scripts/verify_save_failures.py      # persistence fault cases
+python3 scripts/verify_console.py            # debug console: admin rights, world speed, always-on
 ```
 
 Population experiment (E1, `experiments/population/`, headless, not part of the game): `bash scripts/run_population.sh
@@ -78,7 +79,7 @@ and disable compiler servers; keep those flags when invoking `dotnet` directly.
   `TakeItem`, `PlaceWall`, snapshots) and `WorldStorage`
   (load/validate/migrate, atomic `.tmp` + replace writes). This is what `checks/` tests offline.
 - `src/QuestSim.Game/` — one Godot project used for both roles. `Session.cs` parses user args after `--`;
-  `--server` (must be `--headless`) owns a `WorldAuthority`, holds an exclusive `<save>.lock`, and serves ENet RPCs;
+  `--server` (must be `--headless`) owns a `WorldAuthority` (stepped `WorldSpeed` times per frame within a time budget), holds an exclusive `<save>.lock`, and serves ENet RPCs;
   otherwise it is a client that sends intents/requests and renders snapshots via `RoomView.cs` (walls added after the
   first snapshot are drawn incrementally). Server never creates view nodes. Client profiles persist the last
   pickup/build request before sending so T can replay it. Test-only hooks: `--intent-file` (movement, pickup/build
@@ -86,7 +87,7 @@ and disable compiler servers; keep those flags when invoking `dotnet` directly.
 - Nightly v1.0 domain files: `CityGen.cs` (seeded integer world, chunks), `Population.cs` (coarse agents, rumor
   spread), `Living.cs` (tiers, NPC behaviour, combat), `Defeat.cs` (defeat outcomes, item ledger, Virtual Game Master),
   `Rumors.cs` (facts → rumors, asking, faction standing), `PopulationStore.cs` (snapshots), `Content.cs` (data items, mods),
-  `Economy.cs` (F19: four goods per settlement, hourly, saved; `tools/QuestSim.Soak` fast-forwards it; client `MapView.cs` = M debug map).
+  `Commands.cs` (debug console: commands, admins from `<save>.admins`, speed, always-on), `Economy.cs` (F19: four goods per settlement, hourly, saved; `tools/QuestSim.Soak` fast-forwards it; client `MapView.cs` = M debug map).
   The authority touches population arrays only between coarse ticks (background task). All item movements between
   holders go through `Transfer` (ledgered); never edit inventories of named NPCs or caches directly.
 - `experiments/presentation/` — the preserved, disposable Q00 2D/sprite3D/poly3D comparison (`run_presentation.sh`); not the game.
@@ -99,8 +100,9 @@ Core invariants (see ENGINE_RULES.md "World invariants"):
   cross-checks stock/inventory/receipts/walls (taken = initial − stock; held panels = taken − spent), so never
   hand-edit stock or prune receipts. A new item, cost or crate needs matching validation rules.
 - Fixed content positions matter to tests: Q01 movement suites walk Alice +X along z=0 and Bob ±Z along x=−4.
-- World time pauses with zero joined characters. Disconnected characters vanish but keep identity/inventory.
-- Versioning: save schema 5, wire `ProtocolVersion` 8, content ID `questsim:city-v1`. Unknown/incomplete
+- World time pauses with zero joined characters unless the server runs always-on (`--always-on` or the `alwayson`
+  console command). Disconnected characters vanish but keep identity/inventory.
+- Versioning: save schema 5, wire `ProtocolVersion` 9, content ID `questsim:city-v1`. Unknown/incomplete
   saves fail closed. Changing IDs, saves or messages requires stating compatibility and backing up saves before
   migration (v1–v4 saves get a byte-exact `.v<n>-<guid>.bak`; `WorldStorage.Load` chains v1→v2→v3→v4→v5). Protocol changes require rebuilding server and all clients.
 - Targets: Windows and Linux (macOS stretch goal); Vulkan for GPU compute. Verified so far: Linux and native Windows 11 (whitetop, RX 5700; full `test_all.sh --all` minus Xvfb screens), loopback 2–8 players,

@@ -45,7 +45,7 @@ public sealed record SupplyState(string Id, string ItemId, double X, double Z, i
 public sealed record PickupReceipt(string RequestId, string ActorId, string ContainerId, string ItemId, bool Success, string Reason, int Quantity);
 public sealed record BuildReceipt(string RequestId, string ActorId, string SiteId, bool Success, string Reason, int Cost);
 public sealed record WorldSnapshot(int Version, long Sequence, long Tick, double HalfExtent, BlockRecord[] Blocks, ActorState[] Actors, SupplyState[] Supplies, ulong WorldSeed,
-    Opportunity[]? Opportunities = null, LootCache[]? Caches = null, FactionInfo[]? Factions = null, SettlementInfo[]? Settlements = null);
+    Opportunity[]? Opportunities = null, LootCache[]? Caches = null, FactionInfo[]? Factions = null, SettlementInfo[]? Settlements = null, int WorldSpeed = 1);
 
 public sealed class CharacterRecord
 {
@@ -123,7 +123,7 @@ public sealed class WorldSave
 
 public sealed partial class WorldAuthority
 {
-    public const int ProtocolVersion = 8;   // 5: crowd velocities, NPC bodies; 6: settlement economy; 7: faction relations; 8: settlements sent hourly
+    public const int ProtocolVersion = 9;   // 5: crowd velocities, NPC bodies; 6: settlement economy; 7: faction relations; 8: settlements sent hourly; 9: console, speed
     public const int TickRate = 20;
     public const double Speed = 2.5;
     public const double Radius = .25;
@@ -247,7 +247,7 @@ public sealed partial class WorldAuthority
 
     public void Step()
     {
-        if (ActiveCount == 0) return;
+        if (ActiveCount == 0 && !AlwaysOn) return;
         State.Tick++;
         StepLiving();
         foreach (var (peer, c) in active)
@@ -301,7 +301,7 @@ public sealed partial class WorldAuthority
             .Concat(NpcsVisibleTo(viewer, peer is null)).ToArray();
         return new(ProtocolVersion, ++snapshotSequence, State.Tick, State.HalfExtent, State.Blocks.ToArray(), actors, State.Supplies.ToArray(), State.WorldSeed,
             State.Opportunities.Where(o => o.Status == "open").ToArray(), State.Caches.Where(k => k.Inventory.Count > 0).ToArray(),
-            Pop is null ? null : Factions().ToArray(), Pop is null || !settlements ? null : SettlementInfos().ToArray());
+            Pop is null ? null : Factions().ToArray(), Pop is null || !settlements ? null : SettlementInfos().ToArray(), WorldSpeed);
     }
 }
 

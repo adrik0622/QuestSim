@@ -166,6 +166,17 @@ HANDOFF_2026-10-26.md. Tuning defaults wait for polishing passes.
 - **Friendly fire:** on by default, with a server option to turn it off.
 - **Mod trust:** data-only mods for now, deliberately low trust: we must never let an attacker
   use the game to deliver malware.
+- **Debug console (2026-10-26):** the grave/tilde key opens an in-game console; debug tools
+  (game speed first) are commands, and the server checks who may run each one. Nobody is an
+  administrator until the host configures it; an unconfigured world has no admins.
+- **NPC speech:** v1.0 ships non-LLM speech templates; a deeper LLM exploration comes after v1.0
+  (Horizon).
+- **Navigation approach (2026-10-26):** an integer grid with A* in the domain, built around
+  players from generated data (buildings, later nature and player-built pieces mark blocked
+  cells); long trips use the road network. Chosen over baked Godot navmeshes because it fits
+  procedural generation, cheap rebuilding after construction and deterministic replay; a
+  navmesh can replace it behind the same "next step toward X" question if floors or terrain
+  outgrow it.
 
 **Shared world state for initial runs (2026-10-25):** story-created content, world items and inventories stay synchronized for all players, and every player sees the same cart contents; per-player instancing is deferred to a later experiment.
 

@@ -28,6 +28,24 @@ public partial class RoomView : Node3D
     private double inspectorSeconds;
     public void ShowInspection(string text) { inspector.Text = text; inspector.Visible = true; inspectorSeconds = 8; }
 
+    // Debug console (grave/tilde key): typed lines go to the server, which decides what each player may run.
+    public event Action<string>? ConsoleSubmitted;
+    private readonly ColorRect consoleBack = new() { Color = new Color(0, 0, 0, .85f), Visible = false };
+    private readonly Label consoleOutput = new() { Position = new Vector2(12, 8), VerticalAlignment = VerticalAlignment.Bottom };
+    private readonly LineEdit consoleInput = new() { PlaceholderText = "type help, Enter to run, ` or Esc to close" };
+    private readonly List<string> consoleHistory = new() { "Console. Type help." };
+    public bool ConsoleOpen => consoleBack.Visible;
+    public void ShowConsoleLines(IEnumerable<string> lines)
+    {
+        consoleHistory.AddRange(lines);
+        consoleOutput.Text = string.Join("\n", consoleHistory.TakeLast(12));
+    }
+    private void ToggleConsole(bool open)
+    {
+        consoleBack.Visible = open;
+        if (open) consoleInput.CallDeferred(Control.MethodName.GrabFocus); else consoleInput.ReleaseFocus();
+    }
+
     public override void _Ready()
     {
         environment = new Godot.Environment
@@ -46,6 +64,18 @@ public partial class RoomView : Node3D
         inspector.AddThemeFontSizeOverride("font_size", 15); inspector.AddThemeColorOverride("font_color", new Color(1, .95f, .6f)); layer.AddChild(inspector);
         map.SetAnchorsPreset(Control.LayoutPreset.FullRect); layer.AddChild(map);
         layer.MoveChild(map, 0);   // under the HUD text
+        consoleBack.SetAnchorsPreset(Control.LayoutPreset.TopWide); consoleBack.CustomMinimumSize = new Vector2(0, 300);
+        consoleOutput.Size = new Vector2(1200, 250); consoleOutput.AddThemeFontSizeOverride("font_size", 16);
+        consoleInput.Position = new Vector2(8, 262); consoleInput.Size = new Vector2(940, 32);
+        consoleInput.TextSubmitted += text =>
+        {
+            consoleInput.Clear();
+            if (text.Trim().Length == 0) return;
+            ShowConsoleLines(["> " + text]);
+            ConsoleSubmitted?.Invoke(text);
+        };
+        consoleBack.AddChild(consoleOutput); consoleBack.AddChild(consoleInput); layer.AddChild(consoleBack);
+        ShowConsoleLines([]);
     }
     private static MeshInstance3D Box(Node3D parent, Vector3 p, Vector3 size, Color color)
     {
@@ -267,11 +297,14 @@ public partial class RoomView : Node3D
     }
     public void UpdateWorld(WorldSnapshot? state, string ownId, string profile, string connection, Dictionary<string, int>? inventory, string itemMessage, double delta)
     {
-        Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
-        elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
+        if (!ConsoleOpen)
+        {
+            Yaw += ((Input.IsPhysicalKeyPressed(Key.Q) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.E) ? 1 : 0)) * (float)delta;
+            elevation = Mathf.Clamp(elevation + ((Input.IsPhysicalKeyPressed(Key.Up) ? 1 : 0) - (Input.IsPhysicalKeyPressed(Key.Down) ? 1 : 0)) * (float)delta, -.4f, 1.2f);
+        }
         hud.Text = $"{profile} — {connection} | {(firstPerson ? "first" : "third")} person\n" +
-            "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal | I inspect | M map\n" +
-            $"Present: {state?.Actors.Count(a => a.Kind == 0 || a.Health > 0) ?? 0} | {clock}" +
+            "WASD move (Shift sprint) | Q/E turn | Up/Down tilt | C/R camera | F use | B build | T retry | V melee | G shoot | H ask | U heal | I inspect | M map | ` console\n" +
+            $"Present: {state?.Actors.Count(a => a.Kind == 0 || a.Health > 0) ?? 0} | {clock}{(state?.WorldSpeed > 1 ? $" ({state.WorldSpeed}x)" : "")}" +
             string.Concat((state?.Factions ?? []).Where(f => f.Id < 3).Select(f => $" | {f.Name} {f.Standing:+0;-0}")) + "\n" +
             $"Health: {state?.Actors.FirstOrDefault(a => a.Id == ownId)?.Health ?? 0}{Condition(state, ownId)} | Ammo: {inventory?.GetValueOrDefault(WorldAuthority.Ammo) ?? 0} | " +
             $"Bandages: {inventory?.GetValueOrDefault("questsim:bandage") ?? 0} | Panels: {inventory?.GetValueOrDefault(WorldSave.Panel) ?? 0} | {itemMessage}" +
@@ -329,9 +362,19 @@ public partial class RoomView : Node3D
             }
         }
     }
-    public override void _UnhandledKeyInput(InputEvent @event)
+    // The console key is caught before the GUI so it never types into the input line.
+    public override void _Input(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
+        if (key.Keycode == Key.Quoteleft || (ConsoleOpen && key.Keycode == Key.Escape))
+        {
+            ToggleConsole(key.Keycode == Key.Quoteleft && !ConsoleOpen);
+            GetViewport().SetInputAsHandled();
+        }
+    }
+    public override void _UnhandledKeyInput(InputEvent @event)
+    {
+        if (@event is not InputEventKey { Pressed: true, Echo: false } key || ConsoleOpen) return;
         if (key.Keycode == Key.F) PickupRequested?.Invoke();
         if (key.Keycode == Key.B) BuildRequested?.Invoke();
         if (key.Keycode == Key.T) RetryRequested?.Invoke();

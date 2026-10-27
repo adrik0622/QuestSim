@@ -47,3 +47,4 @@ AcceptanceChecks.Run(Check);
 WireChecks.Run(Check);
 EconomyChecks.Run(Check);
 PoliticsChecks.Run(Check);
+ConsoleChecks.Run(Check);
